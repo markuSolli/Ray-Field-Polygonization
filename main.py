@@ -76,20 +76,26 @@ def generate_rays_between_points(points: np.ndarray) -> np.ndarray:
     
     return np.array(rays)
 
+# Read mesh from file
 mesh: Geometry = trimesh.load('suzanne.obj')
+
+# Scale down mesh to fit unit circle
 scale: ndarray[float64] = mesh.extents
 transform: ndarray[float64] = trimesh.transformations.scale_matrix(2 / np.max(scale))
 mesh.apply_transform(transform)
 
+# Generate points along the unit sphere
 sphere_points = generate_equidistant_sphere_points(100, 1.0)
-point_cloud = trimesh.points.PointCloud(sphere_points, colors=[0, 0, 255])
 
+# Generate rays between all points
 rays = generate_rays_between_points(sphere_points)
 
-paths = []
+# Perform ray intersections on the mesh
+locations, index_ray, index_tri = mesh.ray.intersects_location(ray_origins=rays[:, 0], ray_directions=rays[:, 1])
 
-for i in range(sphere_points.shape[0] - 1):
-    paths.append(trimesh.load_path([rays[i, 0], rays[i, 0] + rays[i, 1]]))
+# Create a point cloud of the intersection locations
+point_cloud = trimesh.points.PointCloud(locations, colors=[255, 0, 0])
 
-scene: Scene = trimesh.Scene([mesh, point_cloud, paths])
+# Visualize
+scene: Scene = trimesh.Scene([mesh, point_cloud])
 scene.show()
