@@ -1,6 +1,60 @@
 import trimesh
+import numpy as np
 
-mesh = trimesh.load('suzanne.obj')
+from trimesh import Geometry, Scene
+from numpy import ndarray, float64
 
-scene = trimesh.Scene([mesh])
+def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
+    """
+    Args:
+        r - Radius
+        theta - Polar angle 
+        phi - Azimuthal angle
+
+    Returns:
+        tuple(x, y, z)
+    """
+    x: float = r * np.sin(theta) * np.cos(phi)
+    y: float = r * np.sin(theta) * np.sin(phi)
+    z: float = r * np.cos(theta)
+
+    return (x, y, z)
+
+# How to generate equidistributed points on the surface of a sphere
+# https://www.cmu.edu/biolphys/deserno/pdf/sphere_equi.pdf
+def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> np.ndarray:
+    """
+    Args:
+        N - Number of points
+        r - Radius
+
+    Returns:
+        ndarray[n, 3]
+    """
+    a: float = (4 * np.pi * r * 2) / N
+    d: float = np.sqrt(a)
+    m_theta: int = round(np.pi / d)
+    d_theta: float = np.pi / m_theta
+    d_phi: float = a / d_theta
+    points = []
+
+    for m in range(m_theta):
+        theta: float = np.pi * (m + 0.5) / m_theta
+        m_phi: int = round(2 * np.pi * np.sin(theta) / d_phi)
+
+        for n in range(m_phi):
+            phi = (2 * np.pi * n) / m_phi
+            points.append(spherical_to_cartesian(r, theta, phi))
+    
+    return np.array(points)
+
+mesh: Geometry = trimesh.load('suzanne.obj')
+scale: ndarray[float64] = mesh.extents
+transform: ndarray[float64] = trimesh.transformations.scale_matrix(2 / np.max(scale))
+mesh.apply_transform(transform)
+
+sphere_points = generate_equidistant_sphere_points(100, 1.0)
+point_cloud = trimesh.points.PointCloud(sphere_points, colors=[0, 0, 255])
+
+scene: Scene = trimesh.Scene([mesh, point_cloud])
 scene.show()
