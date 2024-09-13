@@ -22,7 +22,7 @@ def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, f
 
 # How to generate equidistributed points on the surface of a sphere
 # https://www.cmu.edu/biolphys/deserno/pdf/sphere_equi.pdf
-def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> np.ndarray:
+def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> ndarray:
     """
     Args:
         N - Number of points
@@ -48,7 +48,7 @@ def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> np.ndarray:
     
     return np.array(points)
 
-def normalize(vector: np.ndarray) -> np.ndarray:
+def normalize(vector: ndarray) -> ndarray:
     norm: float = np.linalg.norm(vector)
 
     if (norm == 0):
@@ -56,7 +56,7 @@ def normalize(vector: np.ndarray) -> np.ndarray:
     else:
         return vector / norm
 
-def generate_rays_between_points(points: np.ndarray) -> np.ndarray:
+def generate_rays_between_points(points: ndarray) -> ndarray:
     """
     Args:
         points (ndarray[n, 3])
@@ -104,8 +104,8 @@ for i in range(0, normals.shape[0], 10):
     paths.append(trimesh.load_path([locations[i], locations[i] + normals[i] / 10]))
 
 # Create a point cloud of the intersection locations
-point_cloud: PointCloud = trimesh.points.PointCloud(locations, colors=[255, 0, 0])
+point_cloud: PointCloud = PointCloud(locations, colors=[255, 0, 0])
 
 # Visualize
-scene: Scene = trimesh.Scene([mesh, point_cloud, paths])
+scene: Scene = Scene([mesh, point_cloud, paths])
 scene.show()
