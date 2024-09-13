@@ -1,7 +1,7 @@
 import trimesh
 import numpy as np
 
-from trimesh import Geometry, Scene
+from trimesh import Geometry, Scene, PointCloud
 from numpy import ndarray, float64
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
@@ -36,7 +36,7 @@ def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> np.ndarray:
     m_theta: int = round(np.pi / d)
     d_theta: float = np.pi / m_theta
     d_phi: float = a / d_theta
-    points = []
+    points: list[tuple] = []
 
     for m in range(m_theta):
         theta: float = np.pi * (m + 0.5) / m_theta
@@ -49,7 +49,7 @@ def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> np.ndarray:
     return np.array(points)
 
 def normalize(vector: np.ndarray) -> np.ndarray:
-    norm = np.linalg.norm(vector)
+    norm: float = np.linalg.norm(vector)
 
     if (norm == 0):
         return vector
@@ -64,14 +64,15 @@ def generate_rays_between_points(points: np.ndarray) -> np.ndarray:
     Returns:
         ndarray[n, 2, 3] - For dimension 1, index 0 is ray origin and index 1 is ray direction.
     """
-    rays = []
+    rays: list = []
+
     for i in range(points.shape[0]):
         for j in range(i):
-            direction = normalize(points[j] - points[i])
+            direction: ndarray = normalize(points[j] - points[i])
             rays.append([points[i], direction])
         
         for j in range(i + 1, points.shape[0]):
-            direction = normalize(points[j] - points[i])
+            direction: ndarray = normalize(points[j] - points[i])
             rays.append([points[i], direction])
     
     return np.array(rays)
@@ -85,16 +86,16 @@ transform: ndarray[float64] = trimesh.transformations.scale_matrix(2 / np.max(sc
 mesh.apply_transform(transform)
 
 # Generate points along the unit sphere
-sphere_points = generate_equidistant_sphere_points(100, 1.0)
+sphere_points: ndarray = generate_equidistant_sphere_points(100, 1.0)
 
 # Generate rays between all points
-rays = generate_rays_between_points(sphere_points)
+rays: ndarray = generate_rays_between_points(sphere_points)
 
 # Perform ray intersections on the mesh
 locations, index_ray, index_tri = mesh.ray.intersects_location(ray_origins=rays[:, 0], ray_directions=rays[:, 1])
 
 # Create a point cloud of the intersection locations
-point_cloud = trimesh.points.PointCloud(locations, colors=[255, 0, 0])
+point_cloud: PointCloud = trimesh.points.PointCloud(locations, colors=[255, 0, 0])
 
 # Visualize
 scene: Scene = trimesh.Scene([mesh, point_cloud])
