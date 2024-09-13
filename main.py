@@ -1,7 +1,7 @@
 import trimesh
 import numpy as np
 
-from trimesh import Geometry, Scene, PointCloud
+from trimesh import Trimesh, Scene, PointCloud
 from numpy import ndarray, float64
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
@@ -78,7 +78,7 @@ def generate_rays_between_points(points: np.ndarray) -> np.ndarray:
     return np.array(rays)
 
 # Read mesh from file
-mesh: Geometry = trimesh.load('suzanne.obj')
+mesh: Trimesh = trimesh.load_mesh('suzanne.obj')
 
 # Scale down mesh to fit unit circle
 scale: ndarray[float64] = mesh.extents
@@ -94,9 +94,18 @@ rays: ndarray = generate_rays_between_points(sphere_points)
 # Perform ray intersections on the mesh
 locations, index_ray, index_tri = mesh.ray.intersects_location(ray_origins=rays[:, 0], ray_directions=rays[:, 1])
 
+# Get face normals for intersection points
+normals: ndarray = mesh.face_normals[index_tri]
+
+# Visualize normals
+paths = []
+
+for i in range(0, normals.shape[0], 10):
+    paths.append(trimesh.load_path([locations[i], locations[i] + normals[i] / 10]))
+
 # Create a point cloud of the intersection locations
 point_cloud: PointCloud = trimesh.points.PointCloud(locations, colors=[255, 0, 0])
 
 # Visualize
-scene: Scene = trimesh.Scene([mesh, point_cloud])
+scene: Scene = trimesh.Scene([mesh, point_cloud, paths])
 scene.show()
