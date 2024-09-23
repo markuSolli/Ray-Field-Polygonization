@@ -1,7 +1,8 @@
 import trimesh
 import numpy as np
+import open3d as o3d
 
-from trimesh import Trimesh, Scene, PointCloud
+from trimesh import Trimesh
 from numpy import ndarray, float64
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
@@ -97,15 +98,11 @@ locations, index_ray, index_tri = mesh.ray.intersects_location(ray_origins=rays[
 # Get face normals for intersection points
 normals: ndarray = mesh.face_normals[index_tri]
 
-# Visualize normals
-paths = []
+point_cloud = o3d.geometry.PointCloud()
+point_cloud.points = o3d.utility.Vector3dVector(locations)
+point_cloud.normals = o3d.utility.Vector3dVector(normals)
 
-for i in range(0, normals.shape[0], 10):
-    paths.append(trimesh.load_path([locations[i], locations[i] + normals[i] / 10]))
+with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug) as cm:
+    mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(point_cloud, depth=9)
 
-# Create a point cloud of the intersection locations
-point_cloud: PointCloud = PointCloud(locations, colors=[255, 0, 0])
-
-# Visualize
-scene: Scene = Scene([mesh, point_cloud, paths])
-scene.show()
+o3d.visualization.draw_geometries([mesh])
