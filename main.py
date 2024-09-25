@@ -3,6 +3,7 @@ import numpy as np
 import open3d as o3d
 
 from trimesh import Trimesh
+from sklearn.neighbors import BallTree
 from numpy import ndarray, float64
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
@@ -78,6 +79,15 @@ def generate_rays_between_points(points: ndarray) -> ndarray:
     
     return np.array(rays)
 
+def chamfer_distance(a: ndarray, b: ndarray) -> float:
+    tree_a: BallTree = BallTree(a)
+    tree_b: BallTree = BallTree(b)
+
+    dist_x = tree_a.query(b)[0]
+    dist_y = tree_b.query(b)[0]
+
+    return dist_x.mean() + dist_y.mean()
+
 # Read mesh from file
 mesh: Trimesh = trimesh.load_mesh('suzanne.obj')
 
@@ -109,6 +119,10 @@ with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug) as cm
 
 generated_mesh.compute_vertex_normals()
 generated_mesh.paint_uniform_color(np.array([[0.5],[0.5],[0.5]]))
+
+# Compute Chamfer distance
+distance: float = chamfer_distance(mesh.vertices, generated_mesh.vertices)
+print(f'Chamfer distance: {distance}')
 
 # Visualize
 o3d.visualization.draw_geometries([generated_mesh])
