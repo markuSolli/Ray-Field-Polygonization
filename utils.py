@@ -95,7 +95,7 @@ def chamfer_distance(a: ndarray, b: ndarray) -> float:
     tree_a: BallTree = BallTree(a)
     tree_b: BallTree = BallTree(b)
 
-    dist_x = tree_a.query(b)[0]
-    dist_y = tree_b.query(b)[0]
+    dist_a = tree_a.query(b)[0]
+    dist_b = tree_b.query(a)[0]
 
-    return dist_x.mean() + dist_y.mean()
+    return dist_a.mean() + dist_b.mean()
