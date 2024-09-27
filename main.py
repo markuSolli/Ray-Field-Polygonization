@@ -14,7 +14,8 @@ from open3d.utility import VerbosityLevel
 
 SPHERE_RADIUS = 1.0
 POISSON_DEPTH = 8
-RESULT_FILE = 'chamfer_data.csv'
+BATCH_SIZE = 10000
+OBJECT_NAME = 'suzanne'
 
 def get_scaled_mesh(filepath: str) -> Trimesh:
     # Read mesh from file
@@ -43,7 +44,35 @@ def ray_intersection_with_mesh(rays: ndarray, mesh: Trimesh) -> tuple[ndarray, n
 
     return locations, normals
 
-def poisson_surface_reconstruction(points: ndarray, normals: ndarray, verbosity: VerbosityLevel = VerbosityLevel.Debug) -> TriangleMesh:
+def ray_intersection_with_mesh_batched(rays: ndarray, mesh: Trimesh) -> tuple[ndarray, ndarray]:
+    # Initialize lists to hold results
+    all_locations = []
+    all_normals = []
+
+    num_rays = rays.shape[0]
+
+    # Process rays in batches
+    for start in range(0, num_rays, BATCH_SIZE):
+        end = min(start + BATCH_SIZE, num_rays)
+
+        # Perform ray intersections on the mesh
+        locations, index_ray, index_tri = mesh.ray.intersects_location(ray_origins=rays[start:end, 0], ray_directions=rays[start:end, 1])
+
+        # Get face normals for intersection points
+        normals: ndarray = mesh.face_normals[index_tri]
+
+        # Append results to the lists
+        all_locations.append(locations)
+        all_normals.append(normals)
+    
+    # Concatenate all results into final arrays
+    final_locations = np.concatenate(all_locations, axis=0)
+    final_normals = np.concatenate(all_normals, axis=0)
+
+    return final_locations, final_normals
+
+
+def poisson_surface_reconstruction(points: ndarray, normals: ndarray, verbosity: VerbosityLevel = VerbosityLevel.Error) -> TriangleMesh:
     # Create Open3D point cloud with normals
     point_cloud = o3d.geometry.PointCloud()
     point_cloud.points = o3d.utility.Vector3dVector(points)
@@ -59,14 +88,14 @@ def poisson_surface_reconstruction(points: ndarray, normals: ndarray, verbosity:
     return mesh
 
 def save_results(x: list[int], y: list[float]) -> None:
-    with open(RESULT_FILE, mode='w', newline='') as file:
+    with open(f'data/{OBJECT_NAME}_data.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
 
         for x_value, y_value in zip(x, y):
             writer.writerow([x_value, y_value])
 
 def load_results() -> tuple[list[int], list[float]]:
-    with open(RESULT_FILE, mode='r') as file:
+    with open(f'data/{OBJECT_NAME}_data.csv', mode='r') as file:
         reader = csv.reader(file)
         n_points = []
         distances = []
@@ -80,27 +109,34 @@ def load_results() -> tuple[list[int], list[float]]:
 def plot_results(x: list[int], y: list[float]) -> None:
     fig, ax = plt.subplots()
     ax.plot(x, y)
-    fig.savefig('chamfer_plot.svg')
+    ax.set_ylim([0, 0.1])
+    ax.set_ylabel('chamfer distance')
+    ax.set_xlabel('n')
+    ax.set_title(OBJECT_NAME)
+    fig.savefig(f'data/{OBJECT_NAME}_plot.svg')
     plt.show()
 
 def ray_field_polygonization() -> tuple[list[int], list[float]]:
-    original_mesh: Trimesh = get_scaled_mesh('suzanne.obj')
+    original_mesh: Trimesh = get_scaled_mesh(f'models/{OBJECT_NAME}.obj')
 
-    n_points: list[int] = list(range(100, 1001, 50))
+    n_points: list[int] = list(range(100, 1001, 100))
     distances: list[float] = []
 
     for n in n_points:
+        print(f'Points: {n}')
         rays: ndarray = generate_rays_between_sphere_points(n)
-        intersect_locations, intersect_normals = ray_intersection_with_mesh(rays, original_mesh)
+        print(f'Rays: {rays.shape[0]}')
+        intersect_locations, intersect_normals = ray_intersection_with_mesh_batched(rays, original_mesh)
         generated_mesh = poisson_surface_reconstruction(intersect_locations, intersect_normals)
         distance: float = utils.chamfer_distance(original_mesh.vertices, generated_mesh.vertices)
 
         distances.append(distance)
+        print("=====================")
     
-    return n_points, distances
+    # Visualize generated mesh
+    o3d.visualization.draw_geometries([generated_mesh])
 
-# Visualize generated mesh
-#o3d.visualization.draw_geometries([generated_mesh])
+    return n_points, distances
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--Save", action='store_true')
