@@ -109,7 +109,7 @@ def load_results() -> tuple[list[int], list[float]]:
 def plot_results(x: list[int], y: list[float]) -> None:
     fig, ax = plt.subplots()
     ax.plot(x, y)
-    ax.set_ylim([0, 0.1])
+    ax.set_ylim([0, 0.04])
     ax.set_ylabel('chamfer distance')
     ax.set_xlabel('n')
     ax.set_title(OBJECT_NAME)
@@ -123,12 +123,23 @@ def ray_field_polygonization() -> tuple[list[int], list[float]]:
     distances: list[float] = []
 
     for n in n_points:
-        print(f'Points: {n}')
+        print(f'Points:\t\t\t{n}')
+
         rays: ndarray = generate_rays_between_sphere_points(n)
-        print(f'Rays: {rays.shape[0]}')
+
+        print(f'Rays:\t\t\t{rays.shape[0]}')
+
         intersect_locations, intersect_normals = ray_intersection_with_mesh_batched(rays, original_mesh)
         generated_mesh = poisson_surface_reconstruction(intersect_locations, intersect_normals)
-        distance: float = utils.chamfer_distance(original_mesh.vertices, generated_mesh.vertices)
+
+        generated_points = np.asarray(generated_mesh.vertices)
+
+        print(f'Generated points:\t{generated_points.shape[0]}')
+
+        original_points = trimesh.sample.sample_surface(original_mesh, generated_points.shape[0])[0]
+        distance: float = utils.chamfer_distance(original_points, generated_points)
+
+        print(f'Distance:\t\t{distance}')
 
         distances.append(distance)
         print("=====================")
