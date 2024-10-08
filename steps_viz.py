@@ -13,7 +13,7 @@ N_POINTS_1 = 200
 N_POINTS_2 = 100
 N_POINTS_3 = 600
 POISSON_DEPTH = 8
-OBJECT_NAME = 'rocker-arm'
+OBJECT_NAME = 'spot'
 
 # Load mesh
 original_mesh: Trimesh = ray_field.get_scaled_mesh(f'models/{OBJECT_NAME}.obj')

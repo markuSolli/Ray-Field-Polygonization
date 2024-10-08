@@ -60,7 +60,7 @@ def ray_intersection_with_mesh_batched(rays: ndarray, mesh: Trimesh) -> tuple[nd
         end = min(start + BATCH_SIZE, num_rays)
 
         # Perform ray intersections on the mesh
-        locations, index_ray, index_tri = mesh.ray.intersects_location(ray_origins=rays[start:end, 0], ray_directions=rays[start:end, 1]) # TODO: Burde multiple hits være True?
+        locations, index_ray, index_tri = mesh.ray.intersects_location(ray_origins=rays[start:end, 0], ray_directions=rays[start:end, 1], multiple_hits=False)
 
         # Get face normals for intersection points
         normals: ndarray = mesh.face_normals[index_tri]
