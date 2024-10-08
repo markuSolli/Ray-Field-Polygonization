@@ -16,10 +16,18 @@ BATCH_SIZE = 10000
 def get_scaled_mesh(filepath: str) -> Trimesh:
     # Read mesh from file
     mesh: Trimesh = trimesh.load_mesh(filepath)
+    
+    # Translate to origin
+    mesh.vertices -= mesh.centroid
+
+    # Find largest diagonal of bounding box
+    extents: ndarray[float64] = mesh.extents
+    scale = np.sqrt(np.max([extents[0] ** 2 + extents[1] ** 2, 
+                            extents[0] ** 2 + extents[2] ** 2, 
+                            extents[1] ** 2 + extents[2] ** 2]))
 
     # Scale down mesh to fit unit circle
-    scale: ndarray[float64] = mesh.extents
-    transform: ndarray[float64] = trimesh.transformations.scale_matrix(2.0 / np.max(scale))
+    transform: ndarray[float64] = trimesh.transformations.scale_matrix(2.0 / scale)
     mesh.apply_transform(transform)
 
     return mesh
@@ -52,7 +60,7 @@ def ray_intersection_with_mesh_batched(rays: ndarray, mesh: Trimesh) -> tuple[nd
         end = min(start + BATCH_SIZE, num_rays)
 
         # Perform ray intersections on the mesh
-        locations, index_ray, index_tri = mesh.ray.intersects_location(ray_origins=rays[start:end, 0], ray_directions=rays[start:end, 1])
+        locations, index_ray, index_tri = mesh.ray.intersects_location(ray_origins=rays[start:end, 0], ray_directions=rays[start:end, 1]) # TODO: Burde multiple hits være True?
 
         # Get face normals for intersection points
         normals: ndarray = mesh.face_normals[index_tri]

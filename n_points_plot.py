@@ -17,9 +17,9 @@ OBJECT_NAME = 'suzanne'
 def plot_results(x: list[int], y: list[float]) -> None:
     fig, ax = plt.subplots()
     ax.plot(x, y)
-    ax.set_ylim([0, 0.04])
+    ax.set_ylim([0, 0.03])
     ax.set_ylabel('chamfer distance')
-    ax.set_xlabel('n')
+    ax.set_xlabel('n points')
     ax.set_title(OBJECT_NAME)
     fig.savefig(f'data/{DATA_DIR}/{OBJECT_NAME}_plot.svg')
     plt.show()

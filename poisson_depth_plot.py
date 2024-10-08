@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 from trimesh import Trimesh
 from numpy import ndarray
 
-N_POINTS = 400
+N_POINTS = 600
 DATA_DIR = 'poisson_depth'
-OBJECT_NAME = 'suzanne'
+OBJECT_NAME = 'rocker-arm'
 
 def plot_results(x: list[int], y: list[float]) -> None:
     fig, ax = plt.subplots()
