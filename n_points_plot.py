@@ -21,7 +21,7 @@ def plot_results(x: list[int], y: list[float]) -> None:
     ax.set_ylabel('chamfer distance')
     ax.set_xlabel('n points')
     ax.set_title(OBJECT_NAME)
-    fig.savefig(f'data/{DATA_DIR}/{OBJECT_NAME}_plot.svg')
+    fig.savefig(f'data/{DATA_DIR}/{OBJECT_NAME}_plot.png')
     plt.show()
 
 def ray_field_polygonization() -> tuple[list[int], list[float]]:
