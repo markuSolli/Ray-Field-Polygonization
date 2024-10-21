@@ -19,6 +19,8 @@ OBJECT_NAME = 'spot'
 original_mesh: Trimesh = ray_field.get_scaled_mesh(f'models/{OBJECT_NAME}.obj')
 transform: ndarray[float64] = trimesh.transformations.rotation_matrix(np.pi / 4.0, [0.0, 1.0, 0.0])
 original_mesh.apply_transform(transform)
+material = trimesh.visual.material.SimpleMaterial(diffuse=[0.5, 0.5, 0.5, 1.0])  # Blue color (RGBA)
+original_mesh.visual.material = material
 scene: Scene = trimesh.Scene([original_mesh])
 scene.show()
 
