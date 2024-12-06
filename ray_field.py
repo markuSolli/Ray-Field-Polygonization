@@ -10,6 +10,8 @@ from numpy import ndarray, float64
 from open3d.geometry import TriangleMesh
 from open3d.utility import VerbosityLevel
 
+from timeit import default_timer as timer
+
 SPHERE_RADIUS = 1.0
 BATCH_SIZE = 10000
 
@@ -75,7 +77,6 @@ def ray_intersection_with_mesh_batched(rays: ndarray, mesh: Trimesh) -> tuple[nd
 
     return final_locations, final_normals
 
-
 def poisson_surface_reconstruction(points: ndarray, normals: ndarray, depth: int, verbosity: VerbosityLevel = VerbosityLevel.Error) -> TriangleMesh:
     # Create Open3D point cloud with normals
     point_cloud = o3d.geometry.PointCloud()
@@ -91,21 +92,33 @@ def poisson_surface_reconstruction(points: ndarray, normals: ndarray, depth: int
 
     return mesh
 
-def save_results(x: list[int], y: list[float], dir: str, obj_name: str) -> None:
+def save_results(points: list[int], depths: list[int], distances: list[list[float]], dir: str, obj_name: str) -> None:
     with open(f'data/{dir}/{obj_name}_data.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
 
-        for x_value, y_value in zip(x, y):
-            writer.writerow([x_value, y_value])
+        writer.writerow(points)
+        writer.writerow(depths)
 
-def load_results(dir: str, obj_name: str) -> tuple[list[int], list[float]]:
+        for depth in distances:
+            writer.writerow(depth)
+
+def load_results(dir: str, obj_name: str) -> tuple[list[int], list[int], list[list[float]]]:
     with open(f'data/{dir}/{obj_name}_data.csv', mode='r') as file:
         reader = csv.reader(file)
-        n_points = []
-        distances = []
 
+        n_points = next(reader)
+        n_points = [int (x) for x in n_points]
+        
+        depths = next(reader)
+
+        distances = []
+        i = 0
         for row in reader:
-            n_points.append(int(row[0]))
-            distances.append(float(row[1]))
+            distances.append([])
+
+            for entry in row:
+                distances[i].append(float(entry))
+            
+            i += 1
     
-    return n_points, distances
+    return n_points, depths, distances
