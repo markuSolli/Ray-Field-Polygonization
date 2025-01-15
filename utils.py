@@ -1,6 +1,6 @@
 import numpy as np
+import torch
 
-from sklearn.neighbors import BallTree
 from numpy import ndarray
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
@@ -62,40 +62,28 @@ def normalize(vector: ndarray) -> ndarray:
     else:
         return vector / norm
 
-def generate_rays_between_points(points: ndarray) -> ndarray:
-    """
-    Args:
-        points (ndarray[n, 3])
-
-    Returns:
-        ndarray[n, 2, 3] - For dimension 1, index 0 is ray origin and index 1 is ray direction.
-    """
-    rays: list = []
+def generate_rays_between_points(points: ndarray) -> tuple[torch.Tensor, torch.Tensor]:
+    origins: list = []
+    dirs: list = []
 
     for i in range(points.shape[0]):
+        origins.append(points[i])
+        dirs.append([[]])
+
         for j in range(i):
             direction: ndarray = normalize(points[j] - points[i])
-            rays.append([points[i], direction])
+            dirs[i][0].append(direction)
         
         for j in range(i + 1, points.shape[0]):
             direction: ndarray = normalize(points[j] - points[i])
-            rays.append([points[i], direction])
+            dirs[i][0].append(direction)
     
-    return np.array(rays)
+    origins = torch.Tensor(np.array(origins)).to(torch.float32)
+    dirs = torch.Tensor(np.array(dirs)).to(torch.float32)
 
-def chamfer_distance(a: ndarray, b: ndarray) -> float:
-    """
-    Args:
-        a (ndarray[n, 3])
-        b (ndarray[m, 3])
+    return origins, dirs
+
+def generate_rays_between_sphere_points(n: int) -> tuple[torch.Tensor, torch.Tensor]:
+    sphere_points: ndarray = generate_equidistant_sphere_points(n, 1.0)
     
-    Returns:
-        float
-    """
-    tree_a: BallTree = BallTree(a)
-    tree_b: BallTree = BallTree(b)
-
-    dist_a = tree_a.query(b)[0]
-    dist_b = tree_b.query(a)[0]
-
-    return dist_a.mean() + dist_b.mean()
+    return generate_rays_between_points(sphere_points)
