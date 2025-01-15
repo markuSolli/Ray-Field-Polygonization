@@ -10,8 +10,6 @@ from numpy import ndarray, float64
 from open3d.geometry import TriangleMesh
 from open3d.utility import VerbosityLevel
 
-from timeit import default_timer as timer
-
 SPHERE_RADIUS = 1.0
 BATCH_SIZE = 10000
 
