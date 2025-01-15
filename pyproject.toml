@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "ray-field-polygonization"
+version = "0.1.0"
+description = ""
+package-mode = false
+authors = ["Markus Solli Pedersen <markusped@hotmail.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.11"
+jinja2 = "^3.1.2"
+matplotlib = "^3.6.2"
+numpy = "^1.23.0"
+pyembree = {url = "https://folk.ntnu.no/pederbs/pypy/pep503/pyembree/pyembree-0.2.11-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"}
+pytorch3d = [
+	{url = "https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py310_cu116_pyt1130/pytorch3d-0.7.2-cp310-cp310-linux_x86_64.whl"},
+]
+rtree = "^1.0.1"
+scikit-learn = "^1.2.0"
+torch = "^1.13.0"
+torchmeta = {git = "https://github.com/pbsds/pytorch-meta", rev = "upgrade"}
+torchviz = "^0.0.2"
+typer = "^0.7.0"
+ifield = { path = "MARF", develop = true }
+open3d = "0.18.0"
+addict = "2.4.0"
+pyglet = "<2"
+trimesh = "^3.17.1"

@@ -1,0 +1,3 @@
+[submodule "MARF"]
+	path = MARF
+	url = https://github.com/pbsds/MARF.git
