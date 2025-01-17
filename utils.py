@@ -1,17 +1,20 @@
-import numpy as np
 import torch
+import numpy as np
+import open3d as o3d
 
 from numpy import ndarray
+from open3d.geometry import TriangleMesh
+from open3d.utility import VerbosityLevel
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
     """
     Args:
-        r - Radius
-        theta - Polar angle 
-        phi - Azimuthal angle
+    - r: Radius
+    - theta: Polar angle 
+    - phi: Azimuthal angle
 
     Returns:
-        tuple[x, y, z]
+        - cartesian coordinate (tuple[x, y, z])
     """
     x: float = r * np.sin(theta) * np.cos(phi)
     y: float = r * np.sin(theta) * np.sin(phi)
@@ -24,11 +27,11 @@ def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, f
 def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> ndarray:
     """
     Args:
-        N - Number of points
-        r - Radius
+    - N: Number of points
+    - r: Radius
 
     Returns:
-        ndarray[n, 3]
+    - points (ndarray[n, 3])
     """
     a: float = (4 * np.pi * r * 2) / N
     d: float = np.sqrt(a)
@@ -50,10 +53,10 @@ def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> ndarray:
 def normalize(vector: ndarray) -> ndarray:
     """
     Args:
-        vector (ndarray[3])
+    - vector (ndarray[3])
     
     Returns:
-        ndarray[3]
+    - ndarray[3]
     """
     norm: float = np.linalg.norm(vector)
 
@@ -63,7 +66,14 @@ def normalize(vector: ndarray) -> ndarray:
         return vector / norm
 
 def generate_rays_between_points(points: ndarray) -> tuple[torch.Tensor, torch.Tensor]:
-    origins: list = []
+    """
+    Args:
+    - points (ndarray[n, 3])
+
+    Returns:
+    - origins (Tensor[n, 3], dtype=float32)
+    - directions (Tensor[n, 1, 49, 3], dtype=float32)
+    """
     dirs: list = []
 
     for i in range(points.shape[0]):
@@ -78,12 +88,46 @@ def generate_rays_between_points(points: ndarray) -> tuple[torch.Tensor, torch.T
             direction: ndarray = normalize(points[j] - points[i])
             dirs[i][0].append(direction)
     
-    origins = torch.Tensor(np.array(origins)).to(torch.float32)
+    origins = torch.Tensor(points).to(torch.float32)
     dirs = torch.Tensor(np.array(dirs)).to(torch.float32)
 
     return origins, dirs
 
-def generate_rays_between_sphere_points(n: int) -> tuple[torch.Tensor, torch.Tensor]:
-    sphere_points: ndarray = generate_equidistant_sphere_points(n, 1.0)
+def generate_rays_between_sphere_points(N: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Args:
+    - N (ndarray[n, 3])
+
+    Returns:
+    - origins (Tensor[n, 3], dtype=float32)
+    - directions (Tensor[n, 1, 49, 3], dtype=float32)
+    """
+    sphere_points: ndarray = generate_equidistant_sphere_points(N, 1.0)
     
     return generate_rays_between_points(sphere_points)
+
+def poisson_surface_reconstruction(points: ndarray, normals: ndarray, depth: int, verbosity: VerbosityLevel = VerbosityLevel.Error) -> TriangleMesh:
+    """
+    Args:
+    - points (ndarray[n, 3])
+    - normals (ndarray[n, 3])
+    - depth: Depth parameter in Poisson Surface Reconstruction (int)
+    - verbosity (VerbosityLevel)
+
+    Returns:
+    - mesh (TriangleMesh)
+    """
+    # Create Open3D point cloud with normals
+    point_cloud = o3d.geometry.PointCloud()
+    point_cloud.points = o3d.utility.Vector3dVector(points)
+    point_cloud.normals = o3d.utility.Vector3dVector(normals)
+
+    # Run Poisson Surface Reconstruction
+    with o3d.utility.VerbosityContextManager(verbosity) as cm:
+        mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(point_cloud, depth=depth)[0]
+
+    # Fix normals and assign color
+    mesh.compute_vertex_normals()
+    mesh.paint_uniform_color(np.array([[0.5],[0.5],[0.5]]))
+
+    return mesh
