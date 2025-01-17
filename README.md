@@ -7,5 +7,5 @@ poetry install
 poetry shell
 ```
 
-## Executables
-- `test.py`: Work in progress
+## How to run
+Run `poetry run python3 -m analysis.{script name}`

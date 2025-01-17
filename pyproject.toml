@@ -2,8 +2,8 @@
 name = "ray-field-polygonization"
 version = "0.1.0"
 description = ""
-package-mode = false
 authors = ["Markus Solli Pedersen <markusped@hotmail.com>"]
+packages = [{ include = "ray_field" }, { include = "analysis" }]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"

@@ -5,6 +5,7 @@ import open3d as o3d
 from numpy import ndarray
 from open3d.geometry import TriangleMesh
 from open3d.utility import VerbosityLevel
+from sklearn.neighbors import BallTree
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
     """
@@ -72,12 +73,11 @@ def generate_rays_between_points(points: ndarray) -> tuple[torch.Tensor, torch.T
 
     Returns:
     - origins (Tensor[n, 3], dtype=float32)
-    - directions (Tensor[n, 1, 49, 3], dtype=float32)
+    - directions (Tensor[n, 1, n-1, 3], dtype=float32)
     """
     dirs: list = []
 
     for i in range(points.shape[0]):
-        origins.append(points[i])
         dirs.append([[]])
 
         for j in range(i):
@@ -100,7 +100,7 @@ def generate_rays_between_sphere_points(N: int) -> tuple[torch.Tensor, torch.Ten
 
     Returns:
     - origins (Tensor[n, 3], dtype=float32)
-    - directions (Tensor[n, 1, 49, 3], dtype=float32)
+    - directions (Tensor[n, 1, n-1, 3], dtype=float32)
     """
     sphere_points: ndarray = generate_equidistant_sphere_points(N, 1.0)
     
@@ -131,3 +131,20 @@ def poisson_surface_reconstruction(points: ndarray, normals: ndarray, depth: int
     mesh.paint_uniform_color(np.array([[0.5],[0.5],[0.5]]))
 
     return mesh
+
+def chamfer_distance(a: ndarray, b: ndarray) -> float:
+    """
+    Args:
+        a (ndarray[n, 3])
+        b (ndarray[m, 3])
+    
+    Returns:
+        float
+    """
+    tree_a: BallTree = BallTree(a)
+    tree_b: BallTree = BallTree(b)
+
+    dist_a = tree_a.query(b)[0]
+    dist_b = tree_b.query(a)[0]
+
+    return dist_a.mean() + dist_b.mean()
