@@ -148,3 +148,8 @@ def chamfer_distance(a: ndarray, b: ndarray) -> float:
     dist_b = tree_b.query(a)[0]
 
     return dist_a.mean() + dist_b.mean()
+
+def nearest_neighbor_distance(points: ndarray) -> ndarray:
+    ball_tree: BallTree = BallTree(points)
+
+    return ball_tree.query(points, k=2)[0][:, 1]
