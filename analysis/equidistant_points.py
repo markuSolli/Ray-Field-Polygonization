@@ -39,6 +39,8 @@ def plot_results(N_points: list[int], n_points: list[int]) -> None:
     ax.plot(N_points, n_points)
     ax.set_xlabel('N')
     ax.set_ylabel('n')
+    ax.set_xlim([0, 1000])
+    ax.set_ylim(0)
     plt.grid(linestyle='dotted', color='grey')
     fig.savefig(f'{DIR_PATH}.png')
 

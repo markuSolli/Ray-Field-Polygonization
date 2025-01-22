@@ -21,7 +21,7 @@ model_dict = {
     'Lucy': LUCY
 }
 
-def compute_values() -> tuple[list[str], list[int], list[float]]:
+def compute_values() -> tuple[list[str], list[int], list[list[float]]]:
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     object_names = ['Bunny', 'Buddha', 'Armadillo', 'Dragon', 'Lucy']
@@ -106,6 +106,8 @@ def plot_results(object_names: list[str], N_values: list[int], surface_areas: li
     
     ax.set_ylabel('Surface Area')
     ax.set_xlabel('N')
+    ax.set_xlim([0, 1000])
+    ax.set_ylim(0)
     ax.legend(loc=(1.04, 0), title='Object')
     plt.grid(linestyle='dotted', color='grey')
     fig.savefig(f'{DIR_PATH}.png', bbox_inches="tight")

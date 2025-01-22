@@ -96,6 +96,7 @@ def plot_results(N_values: list[int], nnd: list[list[float]],  filename: str) ->
 
     ax.set_ylabel('Normalized median-shifted NND')
     ax.set_xlabel('N')
+    ax.set_ylim([-0.25, 1.75])
     ax.set_xticks(range(1, len(N_values) + 1))
     ax.set_xticklabels(N_values)
     ax.set_title(filename)
