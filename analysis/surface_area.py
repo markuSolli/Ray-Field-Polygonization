@@ -43,15 +43,16 @@ def compute_values() -> tuple[list[str], list[int], list[list[float]]]:
             origins = origins.to(device)
             dirs = dirs.to(device)
 
-            result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
+            with torch.no_grad():
+                result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
 
-            intersections = result[2].cpu()
-            intersection_normals = result[3].cpu()
-            is_intersecting = result[4].cpu()
+                intersections = result[2].cpu()
+                intersection_normals = result[3].cpu()
+                is_intersecting = result[4].cpu()
 
-            is_intersecting = torch.flatten(is_intersecting)
-            intersections = torch.flatten(intersections, end_dim=2)[is_intersecting].detach().numpy()
-            intersection_normals = torch.flatten(intersection_normals, end_dim=2)[is_intersecting].detach().numpy()
+                is_intersecting = torch.flatten(is_intersecting)
+                intersections = torch.flatten(intersections, end_dim=2)[is_intersecting].detach().numpy()
+                intersection_normals = torch.flatten(intersection_normals, end_dim=2)[is_intersecting].detach().numpy()
 
             surface_area = utils.poisson_surface_reconstruction(intersections, intersection_normals, 8).get_surface_area()
             surface_areas[i].append(surface_area)

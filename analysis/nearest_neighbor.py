@@ -45,13 +45,14 @@ def compute_values(filename: str) -> tuple[list[int], list[list[float]]]:
         origins = origins.to(device)
         dirs = dirs.to(device)
 
-        result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
+        with torch.no_grad():
+            result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
 
-        intersections = result[2].cpu()
-        is_intersecting = result[4].cpu()
+            intersections = result[2].cpu()
+            is_intersecting = result[4].cpu()
 
-        is_intersecting = torch.flatten(is_intersecting)
-        intersections = torch.flatten(intersections, end_dim=2)[is_intersecting].detach().numpy()
+            is_intersecting = torch.flatten(is_intersecting)
+            intersections = torch.flatten(intersections, end_dim=2)[is_intersecting].detach().numpy()
 
         distances = utils.nearest_neighbor_distance(intersections)
         nnd.append(distances)

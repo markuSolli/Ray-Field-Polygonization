@@ -51,7 +51,6 @@ def compute_values(filename: str) -> tuple[list[int], list[list[float]]]:
             ray_end = timer()
 
             with torch.no_grad():
-
                 result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
 
                 intersections = result[2].cpu()

@@ -48,10 +48,11 @@ def compute_values() -> tuple[list[str], list[int], list[list[float]]]:
             origins = origins.to(device)
             dirs = dirs.to(device)
 
-            result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
-
-            is_intersecting = result[4].cpu().sum().item()
-            hit_rate = is_intersecting / rays_n
+            with torch.no_grad():
+                result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
+                is_intersecting = result[4].cpu().sum().item()
+                hit_rate = is_intersecting / rays_n
+            
             hit_rates[i].append(hit_rate)
             print(str(hit_rate))
 

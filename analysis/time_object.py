@@ -50,19 +50,20 @@ def compute_values() -> tuple[list[str], list[list[float]]]:
 
             ray_end = timer()
 
-            result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
+            with torch.no_grad():
+                result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
 
-            intersections = result[2].cpu()
-            intersection_normals = result[3].cpu()
-            is_intersecting = result[4].cpu()
+                intersections = result[2].cpu()
+                intersection_normals = result[3].cpu()
+                is_intersecting = result[4].cpu()
 
-            is_intersecting = torch.flatten(is_intersecting)
-            intersections = torch.flatten(intersections, end_dim=2)[is_intersecting].detach().numpy()
-            intersection_normals = torch.flatten(intersection_normals, end_dim=2)[is_intersecting].detach().numpy()
+                is_intersecting = torch.flatten(is_intersecting)
+                intersections = torch.flatten(intersections, end_dim=2)[is_intersecting].detach().numpy()
+                intersection_normals = torch.flatten(intersection_normals, end_dim=2)[is_intersecting].detach().numpy()
 
             query_end = timer()
 
-            generated_mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, 8)
+            utils.poisson_surface_reconstruction(intersections, intersection_normals, 8)
 
             poisson_end = timer()
 
@@ -72,7 +73,7 @@ def compute_values() -> tuple[list[str], list[list[float]]]:
 
             print(f'{(ray_end - ray_start):.3f}\t{(query_end - ray_end):.3f}\t{(poisson_end - query_end):.3f}')
 
-            del origins, dirs, result
+            del origins, dirs, result, intersections, intersection_normals, is_intersecting
             torch.cuda.empty_cache()
             gc.collect()
 
@@ -125,7 +126,7 @@ def plot_results(object_names: list[str], times: list[list[float]]) -> None:
 
     # Formatting the plot
     plt.ylabel('Time (s)')
-    plt.title('N = 600, D = 8')
+    plt.title('N = 600')
     plt.xticks(indices + bar_width, object_names)
     plt.legend(loc=(1.04, 0))
 
