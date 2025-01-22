@@ -86,7 +86,9 @@ def load_results(filename: str) -> tuple[list[int], list[list[float]]]:
 def plot_results(N_values: list[int], nnd: list[list[float]],  filename: str) -> None:
     for i in range(len(nnd)):
         median = np.median(nnd[i])
-        expected_distance = np.sqrt(model_areas[filename] / N_values[i])
+        points = utils.generate_equidistant_sphere_points(N_values[i])
+        n = np.size(points, 0)
+        expected_distance = np.sqrt(model_areas[filename] / n)
 
         for j in range(len(nnd[i])):
             nnd[i][j] = (nnd[i][j] - median) / expected_distance
@@ -97,7 +99,7 @@ def plot_results(N_values: list[int], nnd: list[list[float]],  filename: str) ->
 
     ax.set_ylabel('Normalized median-shifted NND')
     ax.set_xlabel('N')
-    ax.set_ylim([-0.25, 1.75])
+    ax.set_ylim([-0.2, 1.2])
     ax.set_xticks(range(1, len(N_values) + 1))
     ax.set_xticklabels(N_values)
     ax.set_title(filename)
