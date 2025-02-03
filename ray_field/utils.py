@@ -3,7 +3,7 @@ import numpy as np
 import open3d as o3d
 
 from numpy import ndarray
-from open3d.geometry import TriangleMesh
+from open3d.geometry import TriangleMesh, AxisAlignedBoundingBox
 from open3d.utility import VerbosityLevel
 from sklearn.neighbors import BallTree
 
@@ -153,3 +153,63 @@ def nearest_neighbor_distance(points: ndarray) -> ndarray:
     ball_tree: BallTree = BallTree(points)
 
     return ball_tree.query(points, k=2)[0][:, 1]
+
+def find_max_angle_for_bounding_sphere(r: float) -> float:
+    alpha = np.pi
+
+    for i in range(3):
+        root = 2 * np.pi * i + np.arccos(r)
+
+        if (root < np.pi / 2 and root > 0):
+            alpha = root
+            break
+    
+    return alpha
+
+def generate_rays_in_cone(points: ndarray, n: int, r: float, alpha: float) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Args:
+    - points (ndarray[n, 3])
+
+    Returns:
+    - origins (Tensor[n, 3], dtype=float32)
+    - directions (Tensor[n, 1, n-1, 3], dtype=float32)
+    """
+    dirs: list = []
+
+    for i in range(points.shape[0]):
+        dirs.append([[]])
+
+        central_dir = -points[i]
+
+        up = np.array([0, 0, 1]) if abs(central_dir[2]) < 0.9 else np.array([1, 0, 0])
+        right = normalize(np.cross(central_dir, up))
+        up = np.cross(right, central_dir)
+        
+        for _ in range(n - 1):
+            theta = np.random.uniform(0, 2 * np.pi)  # Azimuth angle
+            cos_beta = np.random.uniform(np.cos(alpha), 1)  # Tilt angle
+            sin_beta = np.sqrt(1 - cos_beta ** 2)
+
+            direction = (cos_beta * central_dir + 
+                     sin_beta * np.cos(theta) * right + 
+                     sin_beta * np.sin(theta) * up)
+            dirs[i][0].append(direction)
+
+    origins = torch.Tensor(points).to(torch.float32)
+    dirs = torch.Tensor(np.array(dirs)).to(torch.float32)
+
+    return origins, dirs
+
+def generate_cone_rays_between_sphere_points(N: int, r: float, alpha: float) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Args:
+    - N (ndarray[n, 3])
+
+    Returns:
+    - origins (Tensor[n, 3], dtype=float32)
+    - directions (Tensor[n, 1, n-1, 3], dtype=float32)
+    """
+    sphere_points: ndarray = generate_equidistant_sphere_points(N, 1.0)
+    
+    return generate_rays_in_cone(sphere_points, N - 1, r, alpha)
