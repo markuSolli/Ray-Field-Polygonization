@@ -6,6 +6,7 @@ import numpy as np
 
 from ray_field import BUNNY, BUDDHA, ARMADILLO, DRAGON, LUCY
 from ray_field import utils
+from ray_field import prescan_cone
 from ifield.models import intersection_fields
 
 import matplotlib
@@ -21,6 +22,8 @@ model_dict = {
     'Dragon': DRAGON,
     'Lucy': LUCY
 }
+
+algorithm_list = ['baseline', 'prescan_cone']
 
 def compute_values() -> tuple[list[str], list[int], list[list[float]]]:
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -66,8 +69,20 @@ def compute_values() -> tuple[list[str], list[int], list[list[float]]]:
 
     return object_names, N_values, hit_rates
 
-def save_results(object_names: list[str], N_values: list[int], hit_rates: list[list[float]]) -> None:
-    with open(f'{DIR_PATH}.csv', mode='w', newline='') as file:
+def compute_values_prescan_cone() -> tuple[list[str], list[int], list[list[float]]]:
+    object_names = ['Bunny', 'Buddha', 'Armadillo', 'Dragon', 'Lucy']
+    N_values = list(range(100, 1001, 100))
+    hit_rates = []
+
+    for i in range(len(object_names)):
+        print(object_names[i])
+        result = prescan_cone.prescan_cone_hit_rate(object_names[i])
+        hit_rates.append(result)
+
+    return object_names, N_values, hit_rates
+
+def save_results(object_names: list[str], N_values: list[int], hit_rates: list[list[float]], algorithm: str) -> None:
+    with open(f'{DIR_PATH}_{algorithm}.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
 
         writer.writerow(object_names)
@@ -76,8 +91,8 @@ def save_results(object_names: list[str], N_values: list[int], hit_rates: list[l
         for entry in hit_rates:
             writer.writerow(entry)
 
-def load_results() -> tuple[list[str], list[int], list[list[float]]]:
-    with open(f'{DIR_PATH}.csv', mode='r') as file:
+def load_results(algorithm: str) -> tuple[list[str], list[int], list[list[float]]]:
+    with open(f'{DIR_PATH}_{algorithm}.csv', mode='r') as file:
         reader = csv.reader(file)
 
         object_names = next(reader)
@@ -96,7 +111,7 @@ def load_results() -> tuple[list[str], list[int], list[list[float]]]:
     
     return object_names, N_values, hit_rates
 
-def plot_results(object_names: list[str], N_values: list[int], hit_rates: list[list[float]]) -> None:
+def plot_results(object_names: list[str], N_values: list[int], hit_rates: list[list[float]], algorithm: str) -> None:
     fig, ax = plt.subplots()
 
     for i, entry in enumerate(hit_rates):
@@ -106,20 +121,36 @@ def plot_results(object_names: list[str], N_values: list[int], hit_rates: list[l
     ax.set_xlim([0, 1000])
     ax.set_ylim([0, 1.0])
     ax.set_xlabel('N')
+    ax.set_title(algorithm)
     ax.legend(loc=(1.04, 0), title='Object')
     plt.grid(linestyle='dotted', color='grey')
-    fig.savefig(f'{DIR_PATH}.png', bbox_inches="tight")
+    fig.savefig(f'{DIR_PATH}_{algorithm}.png', bbox_inches="tight")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--Save", action='store_true')
 parser.add_argument("-l", "--Load", action='store_true')
+parser.add_argument("-a", "--Algorithm", type=str)
 
 args = parser.parse_args()
 
+if not args.Algorithm:
+    print('An algorithm must be specified')
+    exit()
+
+if args.Algorithm not in algorithm_list:
+    print(f'"{args.Algorithm}" is not a valid key, valid keys are: {", ".join(algorithm_list)}')
+    exit()
+
 if args.Load:
-    object_names, N_values, hit_rates = load_results()
-    plot_results(object_names, N_values, hit_rates)
+    object_names, N_values, hit_rates = load_results(args.Algorithm)
+    plot_results(object_names, N_values, hit_rates, args.Algorithm)
 elif args.Save:
-    object_names, N_values, hit_rates = compute_values()
-    save_results(object_names, N_values, hit_rates)
-    plot_results(object_names, N_values, hit_rates)
+    if args.Algorithm == 'baseline':
+        object_names, N_values, hit_rates = compute_values()
+    elif args.Algorithm == 'prescan_cone':
+        object_names, N_values, hit_rates = compute_values_prescan_cone()
+    else:
+        exit()
+    
+    save_results(object_names, N_values, hit_rates, args.Algorithm)
+    plot_results(object_names, N_values, hit_rates, args.Algorithm)

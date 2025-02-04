@@ -1,5 +1,7 @@
 from typing import Literal, TypeAlias
 
+POISSON_DEPTH = 8
+
 TENSORBOARD = 'MARF/experiments/logdir/tensorboard/experiment-stanfordv12-'
 
 BUNNY = f'{TENSORBOARD}bunny-both2marf-16atom-50xinscr-10dmiss-geom-25cnrml-8x512fc-leaky_relu-hit-0minatomstdngxp-500sphgrow-10mdrop-layernorm-multi_view-10dmv-nocond-100cwu500clr70tvs-2023-05-31-0010-nqzh/checkpoints/epoch=197-step=13860.ckpt'

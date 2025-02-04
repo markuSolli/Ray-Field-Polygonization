@@ -166,7 +166,7 @@ def find_max_angle_for_bounding_sphere(r: float) -> float:
     
     return alpha
 
-def generate_rays_in_cone(points: ndarray, n: int, r: float, alpha: float) -> tuple[torch.Tensor, torch.Tensor]:
+def generate_rays_in_cone(points: ndarray, n: int, alpha: float) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Args:
     - points (ndarray[n, 3])
@@ -186,7 +186,7 @@ def generate_rays_in_cone(points: ndarray, n: int, r: float, alpha: float) -> tu
         right = normalize(np.cross(central_dir, up))
         up = np.cross(right, central_dir)
         
-        for _ in range(n - 1):
+        for _ in range(n):
             theta = np.random.uniform(0, 2 * np.pi)  # Azimuth angle
             cos_beta = np.random.uniform(np.cos(alpha), 1)  # Tilt angle
             sin_beta = np.sqrt(1 - cos_beta ** 2)
@@ -201,7 +201,7 @@ def generate_rays_in_cone(points: ndarray, n: int, r: float, alpha: float) -> tu
 
     return origins, dirs
 
-def generate_cone_rays_between_sphere_points(N: int, r: float, alpha: float) -> tuple[torch.Tensor, torch.Tensor]:
+def generate_cone_rays_between_sphere_points(N: int, r: float) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Args:
     - N (ndarray[n, 3])
@@ -211,5 +211,7 @@ def generate_cone_rays_between_sphere_points(N: int, r: float, alpha: float) -> 
     - directions (Tensor[n, 1, n-1, 3], dtype=float32)
     """
     sphere_points: ndarray = generate_equidistant_sphere_points(N, 1.0)
+    alpha = find_max_angle_for_bounding_sphere(r)
+    n = np.size(sphere_points, 0)
     
-    return generate_rays_in_cone(sphere_points, N - 1, r, alpha)
+    return generate_rays_in_cone(sphere_points, n - 1, alpha)

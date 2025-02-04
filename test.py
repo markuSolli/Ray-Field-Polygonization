@@ -1,5 +1,5 @@
-from ray_field import algorithms
+from ray_field import prescan_cone
 import open3d as o3d
 
-mesh = algorithms.baseline_prescan('Bunny', 600)
+mesh = prescan_cone.prescan_cone('Bunny', 600)
 o3d.visualization.draw_geometries([mesh])
