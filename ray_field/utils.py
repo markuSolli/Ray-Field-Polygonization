@@ -3,9 +3,11 @@ import numpy as np
 import open3d as o3d
 
 from numpy import ndarray
-from open3d.geometry import TriangleMesh, AxisAlignedBoundingBox
+from open3d.geometry import TriangleMesh
 from open3d.utility import VerbosityLevel
 from sklearn.neighbors import BallTree
+from ray_field import CheckpointName, get_checkpoint
+from ifield.models import intersection_fields
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
     """
@@ -177,6 +179,8 @@ def generate_rays_in_cone(points: ndarray, n: int, alpha: float) -> tuple[torch.
     """
     dirs: list = []
 
+    random_generator = np.random.default_rng(0)
+
     for i in range(points.shape[0]):
         dirs.append([[]])
 
@@ -187,8 +191,8 @@ def generate_rays_in_cone(points: ndarray, n: int, alpha: float) -> tuple[torch.
         up = np.cross(right, central_dir)
         
         for _ in range(n):
-            theta = np.random.uniform(0, 2 * np.pi)  # Azimuth angle
-            cos_beta = np.random.uniform(np.cos(alpha), 1)  # Tilt angle
+            theta = random_generator.uniform(0, 2 * np.pi)  # Azimuth angle
+            cos_beta = random_generator.uniform(np.cos(alpha), 1)  # Tilt angle
             sin_beta = np.sqrt(1 - cos_beta ** 2)
 
             direction = (cos_beta * central_dir + 
@@ -215,3 +219,19 @@ def generate_cone_rays_between_sphere_points(N: int, r: float) -> tuple[torch.Te
     n = np.size(sphere_points, 0)
     
     return generate_rays_in_cone(sphere_points, n - 1, alpha)
+
+def init_model(model_name: CheckpointName) -> tuple[intersection_fields.IntersectionFieldAutoDecoderModel, str]:
+    checkpoint = get_checkpoint(model_name)
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = intersection_fields.IntersectionFieldAutoDecoderModel.load_from_checkpoint(checkpoint).to(device)
+    model.eval()
+
+    return model, device
+
+def generate_sphere_rays(device: str, N: int) -> tuple[torch.Tensor, torch.Tensor]:
+    origins, dirs = generate_rays_between_sphere_points(N)
+    origins = origins.to(device)
+    dirs = dirs.to(device)
+
+    return origins, dirs

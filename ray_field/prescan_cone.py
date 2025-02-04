@@ -1,26 +1,9 @@
 import torch
-from ray_field import utils, CheckpointName, get_checkpoint, POISSON_DEPTH
-from ifield.models import intersection_fields
+from ray_field import utils, CheckpointName, POISSON_DEPTH
 from open3d.geometry import TriangleMesh
 from numpy import ndarray
 
 PRESCAN_N = 100
-
-def init_model(model_name: CheckpointName) -> tuple[intersection_fields.IntersectionFieldAutoDecoderModel, str]:
-    checkpoint = get_checkpoint(model_name)
-
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = intersection_fields.IntersectionFieldAutoDecoderModel.load_from_checkpoint(checkpoint).to(device)
-    model.eval()
-
-    return model, device
-
-def generate_sphere_rays(device: str) -> tuple[torch.Tensor, torch.Tensor]:
-    origins, dirs = utils.generate_rays_between_sphere_points(PRESCAN_N)
-    origins = origins.to(device)
-    dirs = dirs.to(device)
-
-    return origins, dirs
 
 def generate_cone_rays(intersections: torch.Tensor, N: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     r = intersections.abs().max().item()
@@ -52,10 +35,10 @@ def prescan_cone_targeted_scan(model, origins: torch.Tensor, dirs: torch.Tensor)
     return intersections, intersection_normals
 
 def prescan_cone(model_name: CheckpointName, N: int) -> TriangleMesh:
-    model, device = init_model(model_name)
+    model, device = utils.init_model(model_name)
 
     with torch.no_grad():
-        origins, dirs = generate_sphere_rays(device)
+        origins, dirs = utils.generate_sphere_rays(device, PRESCAN_N)
         intersections = prescan_cone_broad_scan(model, device)
 
         origins, dirs = generate_cone_rays(intersections, N, device)
@@ -64,12 +47,12 @@ def prescan_cone(model_name: CheckpointName, N: int) -> TriangleMesh:
     return utils.poisson_surface_reconstruction(intersections, intersection_normals, POISSON_DEPTH)
 
 def prescan_cone_hit_rate(model_name: CheckpointName) -> list[float]:
-    model, device = init_model(model_name)
+    model, device = utils.init_model(model_name)
 
     hit_rates = []
 
     with torch.no_grad():
-        origins, dirs = generate_sphere_rays(device)
+        origins, dirs = utils.generate_sphere_rays(device, PRESCAN_N)
         broad_intersections = prescan_cone_broad_scan(model, origins, dirs)
 
         init_sphere_n = origins.shape[0]
