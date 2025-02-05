@@ -59,7 +59,7 @@ def plot_results(object_names: list[str], N_values: list[int], distances: list[l
     
     ax.set_ylabel('Chamfer Distance')
     ax.set_xlim([0, 1000])
-    #ax.set_ylim([0, 1.0])
+    ax.set_ylim([0, 0.05])
     ax.set_xlabel('N')
     ax.set_title(algorithm)
     ax.legend(loc=(1.04, 0), title='Object')
