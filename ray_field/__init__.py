@@ -11,14 +11,14 @@ DRAGON = f'{TENSORBOARD}dragon-both2marf-16atom-50xinscr-10dmiss-geom-25cnrml-8x
 LUCY = f'{TENSORBOARD}lucy-both2marf-16atom-50xinscr-10dmiss-geom-25cnrml-8x512fc-leaky_relu-hit-0minatomstdngxp-500sphgrow-10mdrop-layernorm-multi_view-10dmv-nocond-100cwu500clr70tvs-2023-05-31-0743-ksul/checkpoints/epoch=192-step=13510.ckpt'
 
 model_dict = {
-    'Bunny': BUNNY,
-    'Buddha': BUDDHA,
-    'Armadillo': ARMADILLO,
-    'Dragon': DRAGON,
-    'Lucy': LUCY
+    'bunny': BUNNY,
+    'happy_buddha': BUDDHA,
+    'armadillo': ARMADILLO,
+    'dragon': DRAGON,
+    'lucy': LUCY
 }
 
-CheckpointName: TypeAlias = Literal['Bunny', 'Buddha', 'Armadillo', 'Dragon', 'Lucy']
+CheckpointName: TypeAlias = Literal['bunny', 'happy_buddha', 'armadillo', 'dragon', 'lucy']
 
 def get_checkpoint(name: CheckpointName) -> str:
     return model_dict[name]

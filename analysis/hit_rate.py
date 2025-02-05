@@ -2,21 +2,20 @@ import csv
 import argparse
 
 from ray_field import prescan_cone, baseline
-from analysis import ALGORITHM_LIST, N_VALUES
+from analysis import ALGORITHM_LIST, N_VALUES, OBJECT_NAMES
 
 import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('Agg')
 
 DIR_PATH = 'analysis/data/hit_rate'
-OBJECT_NAMES = ['Bunny', 'Buddha', 'Armadillo', 'Dragon', 'Lucy']
 
 def compute_values_baseline() -> tuple[list[str], list[int], list[list[float]]]:
     hit_rates = []
 
     for i in range(len(OBJECT_NAMES)):
         print(OBJECT_NAMES[i])
-        result = baseline.baseline_hit_rate(OBJECT_NAMES[i])
+        result = baseline.baseline_hit_rate(OBJECT_NAMES[i], N_VALUES)
         hit_rates.append(result)
 
     return OBJECT_NAMES, N_VALUES, hit_rates
@@ -26,7 +25,7 @@ def compute_values_prescan_cone() -> tuple[list[str], list[int], list[list[float
 
     for i in range(len(OBJECT_NAMES)):
         print(OBJECT_NAMES[i])
-        result = prescan_cone.prescan_cone_hit_rate(OBJECT_NAMES[i])
+        result = prescan_cone.prescan_cone_hit_rate(OBJECT_NAMES[i], N_VALUES)
         hit_rates.append(result)
 
     return OBJECT_NAMES, N_VALUES, hit_rates

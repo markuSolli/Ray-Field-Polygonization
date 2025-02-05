@@ -25,13 +25,13 @@ def baseline(model_name: CheckpointName, N: int) -> TriangleMesh:
 
     return utils.poisson_surface_reconstruction(intersections, intersection_normals, POISSON_DEPTH)
 
-def baseline_hit_rate(model_name: CheckpointName) -> list[float]:
+def baseline_hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[float]:
     model, device = utils.init_model(model_name)
 
     hit_rates = []
 
     with torch.no_grad():
-        for N in range(100, 1001, 100):
+        for N in N_values:
             print(N, end='\t')
             origins, dirs = utils.generate_sphere_rays(device, N)
             sphere_n = origins.shape[0]

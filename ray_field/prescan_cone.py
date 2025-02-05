@@ -46,7 +46,7 @@ def prescan_cone(model_name: CheckpointName, N: int) -> TriangleMesh:
     
     return utils.poisson_surface_reconstruction(intersections, intersection_normals, POISSON_DEPTH)
 
-def prescan_cone_hit_rate(model_name: CheckpointName) -> list[float]:
+def prescan_cone_hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[float]:
     model, device = utils.init_model(model_name)
 
     hit_rates = []
@@ -58,7 +58,7 @@ def prescan_cone_hit_rate(model_name: CheckpointName) -> list[float]:
         init_sphere_n = origins.shape[0]
         init_rays_n = init_sphere_n * (init_sphere_n - 1)
 
-        for N in range(100, 1001, 100):
+        for N in N_values:
             print(N, end='\t')
 
             origins, dirs = generate_cone_rays(broad_intersections, N, device)
