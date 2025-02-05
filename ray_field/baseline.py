@@ -46,3 +46,23 @@ def baseline_hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[f
             torch.cuda.empty_cache()
 
     return hit_rates
+
+def baseline_chamfer(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    model, device = utils.init_model(model_name)
+
+    distances = []
+
+    with torch.no_grad():
+        for N in N_values:
+            print(N, end='\t')
+
+            origins, dirs = utils.generate_sphere_rays(device, N)
+            intersections, intersection_normals = baseline_scan(model, origins, dirs)
+            mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, POISSON_DEPTH)
+            distance = utils.chamfer_distance_to_stanford(model_name, mesh)
+
+            distances.append(distance)
+            print(f'{distance:.6f}')
+            torch.cuda.empty_cache()
+
+    return distances

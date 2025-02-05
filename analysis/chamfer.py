@@ -8,58 +8,58 @@ import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('Agg')
 
-DIR_PATH = 'analysis/data/hit_rate'
+DIR_PATH = 'analysis/data/chamfer'
 
 def compute_values_baseline() -> tuple[list[str], list[int], list[list[float]]]:
-    hit_rates = []
+    distances = []
 
     for i in range(len(OBJECT_NAMES)):
         print(OBJECT_NAMES[i])
-        result = baseline.baseline_hit_rate(OBJECT_NAMES[i], N_VALUES)
-        hit_rates.append(result)
+        result = baseline.baseline_chamfer(OBJECT_NAMES[i], N_VALUES) # TODO: Implement
+        distances.append(result)
 
-    return OBJECT_NAMES, N_VALUES, hit_rates
+    return OBJECT_NAMES, N_VALUES, distances
 
 def compute_values_prescan_cone() -> tuple[list[str], list[int], list[list[float]]]:
-    hit_rates = []
+    distances = []
 
     for i in range(len(OBJECT_NAMES)):
         print(OBJECT_NAMES[i])
-        result = prescan_cone.prescan_cone_hit_rate(OBJECT_NAMES[i], N_VALUES)
-        hit_rates.append(result)
+        result = prescan_cone.prescan_cone_chamfer(OBJECT_NAMES[i], N_VALUES) # TODO: Implement
+        distances.append(result)
 
-    return OBJECT_NAMES, N_VALUES, hit_rates
+    return OBJECT_NAMES, N_VALUES, distances
 
-def save_results(object_names: list[str], N_values: list[int], hit_rates: list[list[float]], algorithm: str) -> None:
+def save_results(object_names: list[str], N_values: list[int], distances: list[list[float]], algorithm: str) -> None:
     with open(f'{DIR_PATH}_{algorithm}.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
 
         writer.writerow(object_names)
         writer.writerow(N_values)
 
-        for entry in hit_rates:
+        for entry in distances:
             writer.writerow(entry)
 
 def load_results(algorithm: str) -> tuple[list[str], list[int], list[list[float]]]:
     with open(f'{DIR_PATH}_{algorithm}.csv', mode='r') as file:
         reader = csv.reader(file)
         rows = list(reader)
-        
+
         object_names = rows[0]
         N_values = [int(value) for value in rows[1]]
-        hit_rates = [[float(value) for value in row] for row in rows[2:]]
+        distances = [[float(value) for value in row] for row in rows[2:]]
     
-    return object_names, N_values, hit_rates
+    return object_names, N_values, distances
 
-def plot_results(object_names: list[str], N_values: list[int], hit_rates: list[list[float]], algorithm: str) -> None:
+def plot_results(object_names: list[str], N_values: list[int], distances: list[list[float]], algorithm: str) -> None:
     fig, ax = plt.subplots()
 
-    for i, entry in enumerate(hit_rates):
+    for i, entry in enumerate(distances):
         ax.plot(N_values, entry, label=f'{object_names[i]}')
     
-    ax.set_ylabel('Hit Rate')
+    ax.set_ylabel('Chamfer Distance')
     ax.set_xlim([0, 1000])
-    ax.set_ylim([0, 1.0])
+    #ax.set_ylim([0, 1.0])
     ax.set_xlabel('N')
     ax.set_title(algorithm)
     ax.legend(loc=(1.04, 0), title='Object')
@@ -82,15 +82,15 @@ if args.Algorithm not in ALGORITHM_LIST:
     exit()
 
 if args.Load:
-    object_names, N_values, hit_rates = load_results(args.Algorithm)
-    plot_results(object_names, N_values, hit_rates, args.Algorithm)
+    object_names, N_values, distances = load_results(args.Algorithm)
+    plot_results(object_names, N_values, distances, args.Algorithm)
 elif args.Save:
     if args.Algorithm == 'baseline':
-        object_names, N_values, hit_rates = compute_values_baseline()
+        object_names, N_values, distances = compute_values_baseline()
     elif args.Algorithm == 'prescan_cone':
-        object_names, N_values, hit_rates = compute_values_prescan_cone()
+        object_names, N_values, distances = compute_values_prescan_cone()
     else:
         exit()
     
-    save_results(object_names, N_values, hit_rates, args.Algorithm)
-    plot_results(object_names, N_values, hit_rates, args.Algorithm)
+    save_results(object_names, N_values, distances, args.Algorithm)
+    plot_results(object_names, N_values, distances, args.Algorithm)

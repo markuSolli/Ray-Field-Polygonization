@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 import open3d as o3d
+import mesh_to_sdf
+import trimesh
 
 from numpy import ndarray
 from open3d.geometry import TriangleMesh
@@ -8,6 +10,9 @@ from open3d.utility import VerbosityLevel
 from sklearn.neighbors import BallTree
 from ray_field import CheckpointName, get_checkpoint
 from ifield.models import intersection_fields
+from ifield.data.stanford import read as stanford_read
+
+DISTANCE_SAMPLES = 30000
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
     """
@@ -150,6 +155,15 @@ def chamfer_distance(a: ndarray, b: ndarray) -> float:
     dist_b = tree_b.query(a)[0]
 
     return dist_a.mean() + dist_b.mean()
+
+def chamfer_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh) -> float:
+    stanford_mesh = stanford_read.read_mesh(model_name)
+    stanford_mesh = mesh_to_sdf.scale_to_unit_sphere(stanford_mesh)
+
+    stanford_samples = trimesh.sample.sample_surface_even(stanford_mesh, DISTANCE_SAMPLES)[0]
+    generated_samples = np.asarray(mesh.sample_points_uniformly(DISTANCE_SAMPLES).points)
+
+    return chamfer_distance(stanford_samples, generated_samples)
 
 def nearest_neighbor_distances(points: ndarray) -> ndarray:
     ball_tree: BallTree = BallTree(points)
