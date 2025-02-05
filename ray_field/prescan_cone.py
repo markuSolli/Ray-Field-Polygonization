@@ -6,7 +6,7 @@ from numpy import ndarray
 PRESCAN_N = 100
 
 def generate_cone_rays(intersections: torch.Tensor, N: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
-    r = intersections.abs().max().item()
+    r = torch.norm(intersections, dim=1).max().item()
     origins, dirs = utils.generate_cone_rays_between_sphere_points(N, r)
     origins = origins.to(device)
     dirs = dirs.to(device)
@@ -39,7 +39,7 @@ def prescan_cone(model_name: CheckpointName, N: int) -> TriangleMesh:
 
     with torch.no_grad():
         origins, dirs = utils.generate_sphere_rays(device, PRESCAN_N)
-        intersections = prescan_cone_broad_scan(model, device)
+        intersections = prescan_cone_broad_scan(model, origins, dirs)
 
         origins, dirs = generate_cone_rays(intersections, N, device)
         intersections, intersection_normals = prescan_cone_targeted_scan(model, origins, dirs)
