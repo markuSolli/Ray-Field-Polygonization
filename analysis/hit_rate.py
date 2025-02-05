@@ -1,39 +1,35 @@
 import csv
 import argparse
 
-from ray_field import prescan_cone, baseline, model_dict
+from ray_field import prescan_cone, baseline
+from analysis import ALGORITHM_LIST, N_VALUES
 
 import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('Agg')
 
 DIR_PATH = 'analysis/data/hit_rate'
-
-algorithm_list = ['baseline', 'prescan_cone']
+OBJECT_NAMES = ['Bunny', 'Buddha', 'Armadillo', 'Dragon', 'Lucy']
 
 def compute_values_baseline() -> tuple[list[str], list[int], list[list[float]]]:
-    object_names = model_dict.keys()
-    N_values = list(range(100, 1001, 100))
     hit_rates = []
 
-    for i in range(len(object_names)):
-        print(object_names[i])
-        result = baseline.baseline_hit_rate(object_names[i])
+    for i in range(len(OBJECT_NAMES)):
+        print(OBJECT_NAMES[i])
+        result = baseline.baseline_hit_rate(OBJECT_NAMES[i])
         hit_rates.append(result)
 
-    return object_names, N_values, hit_rates
+    return OBJECT_NAMES, N_VALUES, hit_rates
 
 def compute_values_prescan_cone() -> tuple[list[str], list[int], list[list[float]]]:
-    object_names = model_dict.keys()
-    N_values = list(range(100, 1001, 100))
     hit_rates = []
 
-    for i in range(len(object_names)):
-        print(object_names[i])
-        result = prescan_cone.prescan_cone_hit_rate(object_names[i])
+    for i in range(len(OBJECT_NAMES)):
+        print(OBJECT_NAMES[i])
+        result = prescan_cone.prescan_cone_hit_rate(OBJECT_NAMES[i])
         hit_rates.append(result)
 
-    return object_names, N_values, hit_rates
+    return OBJECT_NAMES, N_VALUES, hit_rates
 
 def save_results(object_names: list[str], N_values: list[int], hit_rates: list[list[float]], algorithm: str) -> None:
     with open(f'{DIR_PATH}_{algorithm}.csv', mode='w', newline='') as file:
@@ -91,8 +87,8 @@ if not args.Algorithm:
     print('An algorithm must be specified')
     exit()
 
-if args.Algorithm not in algorithm_list:
-    print(f'"{args.Algorithm}" is not a valid key, valid keys are: {", ".join(algorithm_list)}')
+if args.Algorithm not in ALGORITHM_LIST:
+    print(f'"{args.Algorithm}" is not a valid key, valid keys are: {", ".join(ALGORITHM_LIST)}')
     exit()
 
 if args.Load:

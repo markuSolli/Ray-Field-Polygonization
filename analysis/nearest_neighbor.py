@@ -54,7 +54,7 @@ def compute_values(filename: str) -> tuple[list[int], list[list[float]]]:
             is_intersecting = torch.flatten(is_intersecting)
             intersections = torch.flatten(intersections, end_dim=2)[is_intersecting].detach().numpy()
 
-        distances = utils.nearest_neighbor_distance(intersections)
+        distances = utils.nearest_neighbor_distances(intersections)
         nnd.append(distances)
 
         del origins, dirs, result
