@@ -2,6 +2,7 @@ import torch
 from ray_field import utils, CheckpointName, POISSON_DEPTH
 from open3d.geometry import TriangleMesh
 from numpy import ndarray
+from timeit import default_timer as timer
 
 def baseline_scan(model, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:
     result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
@@ -86,3 +87,25 @@ def baseline_hausdorff(model_name: CheckpointName, N_values: list[int]) -> list[
             torch.cuda.empty_cache()
 
     return distances
+
+def baseline_time(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    model, device = utils.init_model(model_name)
+
+    times = []
+
+    with torch.no_grad():
+        for N in N_values:
+            print(N, end='\t')
+
+            start_time = timer()
+
+            origins, dirs = utils.generate_sphere_rays(device, N)
+            intersections, intersection_normals = baseline_scan(model, origins, dirs)
+            utils.poisson_surface_reconstruction(intersections, intersection_normals, POISSON_DEPTH)
+            time = timer() - start_time
+
+            times.append(time)
+            print(f'{time:.6f}')
+            torch.cuda.empty_cache()
+
+    return times

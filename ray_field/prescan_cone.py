@@ -3,6 +3,7 @@ import numpy as np
 from ray_field import utils, CheckpointName, POISSON_DEPTH
 from open3d.geometry import TriangleMesh
 from numpy import ndarray
+from timeit import default_timer as timer
 
 PRESCAN_N = 100
 
@@ -175,3 +176,28 @@ def prescan_cone_optimize(model_name: CheckpointName, N_values: list[int], M_val
             torch.cuda.empty_cache()
 
     return distances
+
+def prescan_cone_time(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    model, device = utils.init_model(model_name)
+
+    times = []
+
+    with torch.no_grad():
+        for N in N_values:
+            print(N, end='\t')
+
+            start_time = timer()
+
+            origins, dirs = utils.generate_sphere_rays(device, PRESCAN_N)
+            intersections = prescan_cone_broad_scan(model, origins, dirs)
+
+            origins, dirs = generate_cone_rays(intersections, N, device)
+            intersections, intersection_normals = prescan_cone_targeted_scan(model, origins, dirs)
+            utils.poisson_surface_reconstruction(intersections, intersection_normals, POISSON_DEPTH)
+            time = timer() - start_time
+
+            times.append(time)
+            print(f'{time:.6f}')
+            torch.cuda.empty_cache()
+
+    return times
