@@ -109,3 +109,32 @@ def baseline_time(model_name: CheckpointName, N_values: list[int]) -> list[float
             torch.cuda.empty_cache()
 
     return times
+
+def baseline_time_steps(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    model, device = utils.init_model(model_name)
+
+    times = []
+
+    with torch.no_grad():
+        for N in N_values:
+            print(N, end='\t')
+
+            ray_start = timer()
+            origins, dirs = utils.generate_sphere_rays(device, N)
+            ray_end = timer()
+
+            intersections, intersection_normals = baseline_scan(model, origins, dirs)
+            scan_end = timer()
+
+            utils.poisson_surface_reconstruction(intersections, intersection_normals, POISSON_DEPTH)
+            reconstruct_end = timer()
+
+            ray_time = ray_end - ray_start
+            scan_time = scan_end - ray_end
+            reconstruct_time = reconstruct_end - scan_end
+
+            times.append([ray_time, scan_time, reconstruct_time])
+            print(f'{ray_time:.4f}\t{scan_time:.4f}\t{reconstruct_time:.4f}')
+            torch.cuda.empty_cache()
+
+    return times

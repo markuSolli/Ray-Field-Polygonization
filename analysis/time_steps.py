@@ -1,6 +1,7 @@
 import os
 import csv
 import argparse
+import numpy as np
 
 from ray_field import prescan_cone, baseline
 from analysis import ALGORITHM_LIST, N_VALUES, OBJECT_NAMES
@@ -9,25 +10,35 @@ import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('Agg')
 
-DIR_PATH = 'analysis/data/optimize/'
+DIR_PATH = 'analysis/data/time_steps/'
 
-def compute_values_prescan_cone(model_name: str) -> tuple[list[int], list[int], list[list[float]]]:
-    M_values = list(range(50, 201, 50))
-    distances = prescan_cone.prescan_cone_optimize(model_name, N_VALUES, M_values)
+def compute_values_baseline(model_name: str) -> tuple[list[str], list[int], list[list[float]]]:
+    stages = ['Ray generation', 'MARF query', 'Surface reconstruction']
+    baseline.baseline(model_name, 100)
 
-    return M_values, N_VALUES, distances
+    times = baseline.baseline_time_steps(model_name, N_VALUES)
 
-def save_results(M_values: list[int], N_values: list[int], distances: list[list[float]], algorithm: str, model_name: str) -> None:
+    return stages, N_VALUES, times
+
+def compute_values_prescan_cone(model_name: str) -> tuple[list[str], list[int], list[list[float]]]:
+    stages = ['Broad scan', 'Ray generation', 'MARF query', 'Surface reconstruction']
+    prescan_cone.prescan_cone(model_name, 100)
+
+    times = prescan_cone.prescan_cone_time_steps(model_name, N_VALUES)
+
+    return stages, N_VALUES, times
+
+def save_results(stages: list[str], N_values: list[int], times: list[list[float]], algorithm: str, model_name: str) -> None:
     if not os.path.exists(DIR_PATH):
         os.makedirs(DIR_PATH)
     
     with open(f'{DIR_PATH}{algorithm}_{model_name}.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
 
-        writer.writerow(M_values)
+        writer.writerow(stages)
         writer.writerow(N_values)
 
-        for entry in distances:
+        for entry in times:
             writer.writerow(entry)
 
 def load_results(algorithm: str, model_name: str) -> tuple[list[int], list[int], list[list[float]]]:
@@ -35,21 +46,25 @@ def load_results(algorithm: str, model_name: str) -> tuple[list[int], list[int],
         reader = csv.reader(file)
         rows = list(reader)
 
-        M_values = [int(value) for value in rows[0]]
+        stages = rows[0]
         N_values = [int(value) for value in rows[1]]
-        distances = [[float(value) for value in row] for row in rows[2:]]
+        times = [[float(value) for value in row] for row in rows[2:]]
     
-    return M_values, N_values, distances
+    return stages, N_values, times
 
-def plot_results(M_values: list[int], N_values: list[int], distances: list[list[float]], algorithm: str, model_name: str) -> None:
+def plot_results(stages: list[str], N_values: list[int], times: list[list[float]], algorithm: str, model_name: str) -> None:
+    times = np.array(times).T
+
     fig, ax = plt.subplots()
 
-    for i, entry in enumerate(distances):
-        ax.plot(N_values, entry, label=f'{M_values[i]}')
+    colors = ['tab:blue', 'tab:orange', 'tab:green']
+    if (len(times) == 4): colors.insert(0, 'tab:purple')
+
+    ax.stackplot(N_values, times, labels=stages, colors=colors)
     
-    ax.set_ylabel('Chamfer Distance')
+    ax.set_ylabel('Time (s)')
     ax.set_xlim([0, 1000])
-    #ax.set_ylim([0, 0.016])
+    ax.set_ylim([0, 9.0])
     ax.set_xlabel('N')
     ax.set_title(f'{algorithm} - {model_name}')
     ax.legend(loc=(1.04, 0), title='Object')
@@ -79,15 +94,15 @@ elif args.Filename not in OBJECT_NAMES:
     exit()
 
 if args.Load:
-    M_values, N_values, distances = load_results(args.Algorithm, args.Filename)
-    plot_results(M_values, N_values, distances, args.Algorithm, args.Filename)
+    stages, N_values, times = load_results(args.Algorithm, args.Filename)
+    plot_results(stages, N_values, times, args.Algorithm, args.Filename)
 elif args.Save:
     if args.Algorithm == 'baseline':
-        exit() # TODO: Implement
+        stages, N_values, times = compute_values_baseline(args.Filename)
     elif args.Algorithm == 'prescan_cone':
-        M_values, N_values, distances = compute_values_prescan_cone(args.Filename)
+        stages, N_values, times = compute_values_prescan_cone(args.Filename)
     else:
         exit()
     
-    save_results(M_values, N_values, distances, args.Algorithm, args.Filename)
-    plot_results(M_values, N_values, distances, args.Algorithm, args.Filename)
+    save_results(stages, N_values, times, args.Algorithm, args.Filename)
+    plot_results(stages, N_values, times, args.Algorithm, args.Filename)

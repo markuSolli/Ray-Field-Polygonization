@@ -15,7 +15,7 @@ def compute_values_baseline() -> tuple[list[str], list[int], list[list[float]]]:
 
     for i in range(len(OBJECT_NAMES)):
         print(OBJECT_NAMES[i])
-        result = baseline.baseline_chamfer(OBJECT_NAMES[i], N_VALUES) # TODO: Implement
+        result = baseline.baseline_chamfer(OBJECT_NAMES[i], N_VALUES)
         distances.append(result)
 
     return OBJECT_NAMES, N_VALUES, distances
@@ -25,7 +25,7 @@ def compute_values_prescan_cone() -> tuple[list[str], list[int], list[list[float
 
     for i in range(len(OBJECT_NAMES)):
         print(OBJECT_NAMES[i])
-        result = prescan_cone.prescan_cone_chamfer(OBJECT_NAMES[i], N_VALUES) # TODO: Implement
+        result = prescan_cone.prescan_cone_chamfer(OBJECT_NAMES[i], N_VALUES)
         distances.append(result)
 
     return OBJECT_NAMES, N_VALUES, distances
