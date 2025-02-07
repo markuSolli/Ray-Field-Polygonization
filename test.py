@@ -1,5 +1,5 @@
 import open3d as o3d
-from ray_field import prescan_cone
+from ray_field import baseline
 
-generated_mesh = prescan_cone.prescan_cone('bunny', 400)
+generated_mesh = baseline.baseline('dragon', 600)
 o3d.visualization.draw_geometries([generated_mesh])

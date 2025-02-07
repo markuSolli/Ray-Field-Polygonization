@@ -66,3 +66,23 @@ def baseline_chamfer(model_name: CheckpointName, N_values: list[int]) -> list[fl
             torch.cuda.empty_cache()
 
     return distances
+
+def baseline_hausdorff(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    model, device = utils.init_model(model_name)
+
+    distances = []
+
+    with torch.no_grad():
+        for N in N_values:
+            print(N, end='\t')
+
+            origins, dirs = utils.generate_sphere_rays(device, N)
+            intersections, intersection_normals = baseline_scan(model, origins, dirs)
+            mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, POISSON_DEPTH)
+            distance = utils.hausdorff_distance_to_stanford(model_name, mesh)
+
+            distances.append(distance)
+            print(f'{distance:.6f}')
+            torch.cuda.empty_cache()
+
+    return distances

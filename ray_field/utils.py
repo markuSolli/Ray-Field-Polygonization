@@ -156,14 +156,42 @@ def chamfer_distance(a: ndarray, b: ndarray) -> float:
 
     return dist_a.mean() + dist_b.mean()
 
-def chamfer_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh) -> float:
+def hausdorff_distance(a: ndarray, b: ndarray) -> float:
+    """
+    Args:
+        a (ndarray[n, 3])
+        b (ndarray[m, 3])
+    
+    Returns:
+        float
+    """
+    tree_a: BallTree = BallTree(a)
+    tree_b: BallTree = BallTree(b)
+
+    dist_a = tree_a.query(b)[0]
+    dist_b = tree_b.query(a)[0]
+
+    return max(np.max(dist_a), np.max(dist_b))
+
+def load_and_scale_stanford_mesh(model_name: CheckpointName):
     stanford_mesh = stanford_read.read_mesh(model_name)
-    stanford_mesh = mesh_to_sdf.scale_to_unit_sphere(stanford_mesh)
+    return mesh_to_sdf.scale_to_unit_sphere(stanford_mesh)
+
+def chamfer_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh) -> float:
+    stanford_mesh = load_and_scale_stanford_mesh(model_name)
 
     stanford_samples = trimesh.sample.sample_surface_even(stanford_mesh, DISTANCE_SAMPLES)[0]
     generated_samples = np.asarray(mesh.sample_points_uniformly(DISTANCE_SAMPLES).points)
 
     return chamfer_distance(stanford_samples, generated_samples)
+
+def hausdorff_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh) -> float:
+    stanford_mesh = load_and_scale_stanford_mesh(model_name)
+
+    stanford_vertices = stanford_mesh.vertices
+    generated_vertices = np.asarray(mesh.vertices)
+
+    return hausdorff_distance(stanford_vertices, generated_vertices)
 
 def nearest_neighbor_distances(points: ndarray) -> ndarray:
     ball_tree: BallTree = BallTree(points)
