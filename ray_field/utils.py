@@ -210,43 +210,35 @@ def find_max_angle_for_bounding_sphere(r: float) -> float:
     
     return alpha
 
-def generate_rays_in_cone(points: ndarray, angles: ndarray) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Args:
-    - points (ndarray[n, 3])
+def generate_rays_in_cone(points: torch.Tensor, angles: torch.Tensor, device: str) -> tuple[torch.Tensor, torch.Tensor]:
+    N = points.shape[0]
+    M = N - 1
 
-    Returns:
-    - origins (Tensor[n, 3], dtype=float32)
-    - directions (Tensor[n, 1, n-1, 3], dtype=float32)
-    """
-    n = points.shape[0]
-    dirs: list = []
+    # Central direction for each camera (opposite to the camera position)
+    central_dirs = (-points).to(torch.float32)
 
-    random_generator = np.random.default_rng(0)
+    # Define an arbitrary "up" vector for each point (avoid collinearity)
+    up = torch.tensor([0.0, 0.0, 1.0], device=device, dtype=torch.float32).expand(N, 3).clone()
+    mask = torch.abs(central_dirs[:, 2]) >= 0.9
+    up[mask] = torch.tensor([1.0, 0.0, 0.0], device=device, dtype=torch.float32)
 
-    for i in range(n):
-        dirs.append([[]])
+    # Compute right and up vectors for each frame
+    right = torch.cross(central_dirs, up)
+    right = right / torch.norm(right, dim=1, keepdim=True)
+    up = torch.cross(right, central_dirs)
 
-        central_dir = -points[i]
+    # Generate random azimuth angles (theta) and cosine of tilt angles (beta)
+    theta = torch.rand(N, M, device=device, dtype=torch.float32) * (2 * torch.pi)
+    cos_beta = torch.rand(N, M, device=device, dtype=torch.float32) * (1 - torch.cos(angles)).unsqueeze(1) + torch.cos(angles).unsqueeze(1)
+    sin_beta = torch.sqrt(1 - cos_beta**2)
 
-        up = np.array([0, 0, 1]) if abs(central_dir[2]) < 0.9 else np.array([1, 0, 0])
-        right = normalize(np.cross(central_dir, up))
-        up = np.cross(right, central_dir)
-        
-        for _ in range(n):
-            theta = random_generator.uniform(0, 2 * np.pi)  # Azimuth angle
-            cos_beta = random_generator.uniform(np.cos(angles[i]), 1)  # Tilt angle
-            sin_beta = np.sqrt(1 - cos_beta ** 2)
+    directions = (
+        cos_beta.unsqueeze(-1) * central_dirs.unsqueeze(1) +
+        sin_beta.unsqueeze(-1) * torch.cos(theta).unsqueeze(-1) * right.unsqueeze(1) +
+        sin_beta.unsqueeze(-1) * torch.sin(theta).unsqueeze(-1) * up.unsqueeze(1)
+    ).unsqueeze(1)
 
-            direction = (cos_beta * central_dir + 
-                     sin_beta * np.cos(theta) * right + 
-                     sin_beta * np.sin(theta) * up)
-            dirs[i][0].append(direction)
-
-    origins = torch.Tensor(points).to(torch.float32)
-    dirs = torch.Tensor(np.array(dirs)).to(torch.float32)
-
-    return origins, dirs
+    return points.to(torch.float32), directions.to(torch.float32)
 
 def init_model(model_name: CheckpointName) -> tuple[intersection_fields.IntersectionFieldAutoDecoderModel, str]:
     checkpoint = get_checkpoint(model_name)

@@ -3,11 +3,10 @@ import trimesh
 import torch
 from ray_field import utils, baseline, prescan_cone
 from analysis import ALGORITHM_LIST, OBJECT_NAMES
-import numpy as np
 import open3d as o3d
 
 from trimesh import Scene
-from numpy import ndarray, float64
+from numpy import ndarray
 
 N_POINTS = 200
 

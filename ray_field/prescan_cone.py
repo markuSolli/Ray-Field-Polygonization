@@ -29,10 +29,8 @@ def generate_cone_rays(intersections: torch.Tensor, N: int, device: str) -> tupl
     max_angles = torch.max(angles, dim=1).values
 
     # Generate rays
-    sphere_points = sphere_points.cpu().detach().numpy()
-    max_angles = max_angles.cpu().detach().numpy()
-    origins, dirs = utils.generate_rays_in_cone(sphere_points, max_angles)
-    return origins.to(device), dirs.to(device)
+    origins, dirs = utils.generate_rays_in_cone(sphere_points, max_angles, device)
+    return origins, dirs
 
 def prescan_cone_broad_scan(model, origins, dirs) -> torch.Tensor:
     result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
