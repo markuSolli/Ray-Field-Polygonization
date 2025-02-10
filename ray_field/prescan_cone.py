@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 from ray_field import utils, CheckpointName, POISSON_DEPTH
 from open3d.geometry import TriangleMesh
 from numpy import ndarray
@@ -8,35 +7,32 @@ from timeit import default_timer as timer
 PRESCAN_N = 100
 
 def generate_cone_rays(intersections: torch.Tensor, N: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
-    sphere_points = utils.generate_equidistant_sphere_points(N)
-    intersections_cpu = intersections.cpu().clone()
-    n = sphere_points.shape[0]
-    angles = np.zeros(n)
+    sphere_points = torch.from_numpy(utils.generate_equidistant_sphere_points(N)).to(device)
+    cam_forwards = -sphere_points / torch.norm(sphere_points, dim=1, keepdim=True)
 
-    for i in range(n):
-        # Compute basis
-        z_axis = -sphere_points[i]
-        x_candidate = np.array([1, 0, 0]) if abs(z_axis[0]) < 0.9 else np.array([0, 1, 0])
-        x_axis = x_candidate - np.dot(x_candidate, z_axis) * z_axis
-        x_axis /= np.linalg.norm(x_axis)
-        y_axis = np.cross(z_axis, x_axis)
+    # Expand dimensions to align for broadcasting
+    intersections_exp = intersections.unsqueeze(0)
+    cam_pos_exp = sphere_points.unsqueeze(1)
+    cam_forward_exp = cam_forwards.unsqueeze(1)
 
-        # Transform point cloud
-        rot_matrix = np.stack([x_axis, y_axis, z_axis])
-        transformed_points = torch.from_numpy(rot_matrix.astype(np.float32)) @ intersections_cpu.T
+    # Compute vectors angles
+    vecs_to_points = intersections_exp - cam_pos_exp
 
-        # Project to xz-plane
-        xz_projected = transformed_points[[0, 2], :].T
+    dot_products = torch.sum(vecs_to_points * cam_forward_exp, dim=2)
+    vec_norms = torch.norm(vecs_to_points, dim=2)
+    cam_norms = torch.norm(cam_forwards, dim=1, keepdim=True)
 
-        # Compute cone angle
-        r_max = torch.norm(xz_projected, dim=1).max().item()
-        angles[i] = np.arctan(r_max)
+    cos_theta = dot_products / (vec_norms * cam_norms)
+    cos_theta = torch.clamp(cos_theta, -1.0, 1.0)
 
-    origins, dirs = utils.generate_rays_in_cone(sphere_points, angles)
-    origins = origins.to(device)
-    dirs = dirs.to(device)
+    angles = torch.acos(cos_theta)
+    max_angles = torch.max(angles, dim=1).values
 
-    return origins, dirs
+    # Generate rays
+    sphere_points = sphere_points.cpu().detach().numpy()
+    max_angles = max_angles.cpu().detach().numpy()
+    origins, dirs = utils.generate_rays_in_cone(sphere_points, max_angles)
+    return origins.to(device), dirs.to(device)
 
 def prescan_cone_broad_scan(model, origins, dirs) -> torch.Tensor:
     result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
