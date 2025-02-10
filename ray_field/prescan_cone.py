@@ -2,31 +2,14 @@ import torch
 from ray_field import utils, CheckpointName, POISSON_DEPTH
 from open3d.geometry import TriangleMesh
 from numpy import ndarray
+import numpy as np
 from timeit import default_timer as timer
 
-PRESCAN_N = 100
+PRESCAN_N = 100  
 
 def generate_cone_rays(intersections: torch.Tensor, N: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     sphere_points = torch.from_numpy(utils.generate_equidistant_sphere_points(N)).to(device)
-    cam_forwards = -sphere_points / torch.norm(sphere_points, dim=1, keepdim=True)
-
-    # Expand dimensions to align for broadcasting
-    intersections_exp = intersections.unsqueeze(0)
-    cam_pos_exp = sphere_points.unsqueeze(1)
-    cam_forward_exp = cam_forwards.unsqueeze(1)
-
-    # Compute vectors angles
-    vecs_to_points = intersections_exp - cam_pos_exp
-
-    dot_products = torch.sum(vecs_to_points * cam_forward_exp, dim=2)
-    vec_norms = torch.norm(vecs_to_points, dim=2)
-    cam_norms = torch.norm(cam_forwards, dim=1, keepdim=True)
-
-    cos_theta = dot_products / (vec_norms * cam_norms)
-    cos_theta = torch.clamp(cos_theta, -1.0, 1.0)
-
-    angles = torch.acos(cos_theta)
-    max_angles = torch.max(angles, dim=1).values
+    max_angles = utils.get_max_cone_angles(sphere_points, intersections)
 
     # Generate rays
     origins, dirs = utils.generate_rays_in_cone(sphere_points, max_angles, device)
@@ -226,3 +209,21 @@ def prescan_cone_time_steps(model_name: CheckpointName, N_values: list[int]) -> 
             torch.cuda.empty_cache()
 
     return times
+
+def prescan_cone_radius(model_name: CheckpointName, N: int) -> list[float]:
+    model, device = utils.init_model(model_name)
+
+    with torch.no_grad():
+        origins, dirs = utils.generate_sphere_rays(device, PRESCAN_N)
+        broad_intersections = prescan_cone_broad_scan(model, origins, dirs)
+
+        sphere_points = torch.from_numpy(utils.generate_equidistant_sphere_points(N)).to(device)
+        max_angles = utils.get_max_cone_angles(sphere_points, broad_intersections)
+
+        max_angles = max_angles.cpu().detach().numpy()
+
+        print(f'{np.min(max_angles):.3f}\t{np.max(max_angles):.3f}')
+
+        torch.cuda.empty_cache()
+    
+    return max_angles

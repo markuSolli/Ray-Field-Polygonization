@@ -138,3 +138,20 @@ def baseline_time_steps(model_name: CheckpointName, N_values: list[int]) -> list
             torch.cuda.empty_cache()
 
     return times
+
+def baseline_radius(N: int) -> float:
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    sphere_points = utils.generate_equidistant_sphere_points(N)
+    first_point = sphere_points[0]
+    other_points = sphere_points[1:]
+    
+    first_point = torch.from_numpy(first_point).unsqueeze(0).to(device)
+    other_points = torch.from_numpy(other_points).to(device)
+
+    print(first_point.shape, other_points.shape)
+
+    max_angles = utils.get_max_cone_angles(first_point, other_points)
+    max_angles = max_angles.cpu().detach().numpy()
+    
+    return max_angles[0]

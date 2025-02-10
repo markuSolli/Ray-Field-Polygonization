@@ -238,3 +238,24 @@ def generate_sphere_rays(device: str, N: int) -> tuple[torch.Tensor, torch.Tenso
     dirs = dirs.to(device)
 
     return origins, dirs
+
+def get_max_cone_angles(sphere_points: torch.Tensor, intersections: torch.Tensor) -> torch.Tensor:
+    cam_forwards = -sphere_points / torch.norm(sphere_points, dim=1, keepdim=True)
+
+    # Expand dimensions to align for broadcasting
+    intersections_exp = intersections.unsqueeze(0)
+    cam_pos_exp = sphere_points.unsqueeze(1)
+    cam_forward_exp = cam_forwards.unsqueeze(1)
+
+    # Compute vectors angles
+    vecs_to_points = intersections_exp - cam_pos_exp
+
+    dot_products = torch.sum(vecs_to_points * cam_forward_exp, dim=2)
+    vec_norms = torch.norm(vecs_to_points, dim=2)
+    cam_norms = torch.norm(cam_forwards, dim=1, keepdim=True)
+
+    cos_theta = dot_products / (vec_norms * cam_norms)
+    cos_theta = torch.clamp(cos_theta, -1.0, 1.0)
+
+    angles = torch.acos(cos_theta)
+    return torch.max(angles, dim=1).values  
