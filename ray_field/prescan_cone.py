@@ -211,21 +211,18 @@ def prescan_cone_time_steps(model_name: CheckpointName, N_values: list[int]) -> 
             broad_end = timer()
 
             origins, dirs = generate_cone_rays(intersections, N, device)
-            ray_end = timer()
-
             intersections, intersection_normals = prescan_cone_targeted_scan(model, origins, dirs)
-            scan_end = timer()
+            targeted_end = timer()
 
             utils.poisson_surface_reconstruction(intersections, intersection_normals, POISSON_DEPTH)
             reconstruct_end = timer()
 
             broad_time = broad_end - broad_start
-            ray_time = ray_end - broad_end
-            scan_time = scan_end - ray_end
-            reconstruct_time = reconstruct_end - scan_end
+            targeted_time = targeted_end - broad_end
+            reconstruct_time = reconstruct_end - targeted_end
 
-            times.append([broad_time, ray_time, scan_time, reconstruct_time])
-            print(f'{broad_time:.4f}\t{ray_time:.4f}\t{scan_time:.4f}\t{reconstruct_time:.4f}')
+            times.append([broad_time, targeted_time, reconstruct_time])
+            print(f'{broad_time:.4f}\t{targeted_time:.4f}\t{reconstruct_time:.4f}')
             torch.cuda.empty_cache()
 
     return times

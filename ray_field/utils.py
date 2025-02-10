@@ -193,23 +193,6 @@ def hausdorff_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMes
 
     return hausdorff_distance(stanford_vertices, generated_vertices)
 
-def nearest_neighbor_distances(points: ndarray) -> ndarray:
-    ball_tree: BallTree = BallTree(points)
-
-    return ball_tree.query(points, k=2)[0][:, 1]
-
-def find_max_angle_for_bounding_sphere(r: float) -> float:
-    alpha = np.pi
-
-    for i in range(3):
-        root = 2 * np.pi * i + np.arccos(r)
-
-        if (root < np.pi / 2 and root > 0):
-            alpha = root
-            break
-    
-    return alpha
-
 def generate_rays_in_cone(points: torch.Tensor, angles: torch.Tensor, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     N = points.shape[0]
     M = N - 1

@@ -21,7 +21,7 @@ def compute_values_baseline(model_name: str) -> tuple[list[str], list[int], list
     return stages, N_VALUES, times
 
 def compute_values_prescan_cone(model_name: str) -> tuple[list[str], list[int], list[list[float]]]:
-    stages = ['Broad scan', 'Ray generation', 'MARF query', 'Surface reconstruction']
+    stages = ['Broad scan', 'Targeted scan', 'Surface reconstruction']
     prescan_cone.prescan_cone(model_name, 100)
 
     times = prescan_cone.prescan_cone_time_steps(model_name, N_VALUES)
@@ -57,14 +57,11 @@ def plot_results(stages: list[str], N_values: list[int], times: list[list[float]
 
     fig, ax = plt.subplots()
 
-    colors = ['tab:blue', 'tab:orange', 'tab:green']
-    if (len(times) == 4): colors.insert(0, 'tab:purple')
-
-    ax.stackplot(N_values, times, labels=stages, colors=colors)
+    ax.stackplot(N_values, times, labels=stages)
     
     ax.set_ylabel('Time (s)')
     ax.set_xlim([0, 1000])
-    ax.set_ylim([0, 9.0])
+    ax.set_ylim([0, 6.5])
     ax.set_xlabel('N')
     ax.set_title(f'{algorithm} - {model_name}')
     ax.legend(loc=(1.04, 0), title='Object')
