@@ -3,8 +3,9 @@ import csv
 import argparse
 import numpy as np
 
-from ray_field import prescan_cone, baseline
-from analysis import ALGORITHM_LIST, N_VALUES, OBJECT_NAMES
+from ray_field import CheckpointName
+from ray_field.algorithm import Algorithm
+from analysis import ALGORITHM_LIST, N_VALUES, OBJECT_NAMES, class_dict
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -12,19 +13,13 @@ matplotlib.use('Agg')
 
 DIR_PATH = 'analysis/data/time_steps/'
 
-def compute_values_baseline(model_name: str) -> tuple[list[str], list[int], list[list[float]]]:
+def compute_values(model_name: CheckpointName, algorithm: type[Algorithm]) -> tuple[list[str], list[int], list[list[float]]]:
     stages = ['Ray generation', 'MARF query', 'Surface reconstruction']
-    baseline.baseline(model_name, 100)
+    
+    # Warmup
+    algorithm.surface_reconstruction(model_name, 100)
 
-    times = baseline.baseline_time_steps(model_name, N_VALUES)
-
-    return stages, N_VALUES, times
-
-def compute_values_prescan_cone(model_name: str) -> tuple[list[str], list[int], list[list[float]]]:
-    stages = ['Broad scan', 'Targeted scan', 'Surface reconstruction']
-    prescan_cone.prescan_cone(model_name, 100)
-
-    times = prescan_cone.prescan_cone_time_steps(model_name, N_VALUES)
+    times = algorithm.time_steps(model_name, N_VALUES)
 
     return stages, N_VALUES, times
 
@@ -60,8 +55,8 @@ def plot_results(stages: list[str], N_values: list[int], times: list[list[float]
     ax.stackplot(N_values, times, labels=stages)
     
     ax.set_ylabel('Time (s)')
-    ax.set_xlim([0, 1000])
-    ax.set_ylim([0, 6.5])
+    ax.set_xlim([0, N_values[-1]])
+    #ax.set_ylim([0, 6.5])
     ax.set_xlabel('N')
     ax.set_title(f'{algorithm} - {model_name}')
     ax.legend(loc=(1.04, 0), title='Object')
@@ -94,12 +89,6 @@ if args.Load:
     stages, N_values, times = load_results(args.Algorithm, args.Filename)
     plot_results(stages, N_values, times, args.Algorithm, args.Filename)
 elif args.Save:
-    if args.Algorithm == 'baseline':
-        stages, N_values, times = compute_values_baseline(args.Filename)
-    elif args.Algorithm == 'prescan_cone':
-        stages, N_values, times = compute_values_prescan_cone(args.Filename)
-    else:
-        exit()
-    
+    stages, N_values, times = compute_values(args.Filename, class_dict[args.Algorithm])
     save_results(stages, N_values, times, args.Algorithm, args.Filename)
     plot_results(stages, N_values, times, args.Algorithm, args.Filename)

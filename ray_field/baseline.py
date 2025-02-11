@@ -39,6 +39,9 @@ class Baseline(Algorithm):
                 print(f'{hit_rate:.3f}')
 
                 torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
 
         return hit_rates
 
@@ -60,6 +63,9 @@ class Baseline(Algorithm):
                 print(f'{distance:.6f}')
 
                 torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
 
         return distances
 
@@ -80,6 +86,9 @@ class Baseline(Algorithm):
                 distances.append(distance)
                 print(f'{distance:.6f}')
                 torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
 
         return distances
 
@@ -107,6 +116,9 @@ class Baseline(Algorithm):
                 
                 print()
                 torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
 
         return times / Baseline.time_samples
 
@@ -125,31 +137,39 @@ class Baseline(Algorithm):
         """
         model, device = utils.init_model(model_name)
 
-        times = []
+        times = np.zeros((len(N_values), 3))
 
         with torch.no_grad():
-            for N in N_values:
-                print(N, end='\t')
+            for i in range(len(N_values)):
+                N = N_values[i]
 
-                ray_start = timer()
-                origins, dirs = utils.generate_sphere_rays(N, device)
-                ray_end = timer()
+                for _ in range(Baseline.time_samples):
+                    ray_start = timer()
+                    origins, dirs = utils.generate_sphere_rays(N, device)
+                    ray_end = timer()
 
-                intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
-                scan_end = timer()
+                    intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
+                    scan_end = timer()
 
-                _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
-                reconstruct_end = timer()
+                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
+                    reconstruct_end = timer()
 
-                ray_time = ray_end - ray_start
-                scan_time = scan_end - ray_end
-                reconstruct_time = reconstruct_end - scan_end
+                    ray_time = ray_end - ray_start
+                    scan_time = scan_end - ray_end
+                    reconstruct_time = reconstruct_end - scan_end
 
-                times.append([ray_time, scan_time, reconstruct_time])
-                print(f'{ray_time:.4f}\t{scan_time:.4f}\t{reconstruct_time:.4f}')
+                    times[i][0] = times[i][0] + ray_time
+                    times[i][1] = times[i][1] + scan_time
+                    times[i][2] = times[i][2] + reconstruct_time
+                    print(f'N: {N}\t{ray_time:.4f}\t{scan_time:.4f}\t{reconstruct_time:.4f}')
+                    torch.cuda.empty_cache()
+                
                 torch.cuda.empty_cache()
 
-        return times
+        del model
+        torch.cuda.empty_cache()
+
+        return times / Baseline.time_samples
     
     @staticmethod
     def radius(N: int) -> float:
