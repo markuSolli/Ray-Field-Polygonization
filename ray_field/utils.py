@@ -41,7 +41,7 @@ def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> ndarray:
     Returns:
     - points (ndarray[n, 3])
     """
-    a: float = (4 * np.pi * r * 2) / N
+    a: float = (4 * np.pi * r**2) / N
     d: float = np.sqrt(a)
     m_theta: int = round(np.pi / d)
     d_theta: float = np.pi / m_theta
@@ -57,6 +57,31 @@ def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> ndarray:
             points.append(spherical_to_cartesian(r, theta, phi))
     
     return np.array(points)
+
+def generate_equidistant_sphere_points_tensor(N: int, device: str, r: float = 1.0) -> torch.Tensor:
+    a = (4 * np.pi * r**2) / N
+    d = np.sqrt(a)
+    m_theta = round(np.pi / d)
+    d_theta = np.pi / m_theta
+    d_phi = a / d_theta
+
+    # Compute all theta and m_phi
+    theta = torch.linspace(d_theta / 2, np.pi - d_theta / 2, m_theta, device=device)
+    m_phi = torch.round(2 * np.pi * torch.sin(theta) / d_phi).long()
+
+    # For each m_phi compute phi
+    phi = [torch.linspace(0, (2 * np.pi * (m - 1)) / m, m, device=device) for m in m_phi]
+
+    # Make theta and phi grid
+    theta_expanded = torch.cat([torch.full((len(p),), t, device=device) for t, p in zip(theta, phi)])
+    phi_expanded = torch.cat(phi)
+
+    # Convert to cartesian
+    x = r * torch.sin(theta_expanded) * torch.cos(phi_expanded)
+    y = r * torch.sin(theta_expanded) * torch.sin(phi_expanded)
+    z = r * torch.cos(theta_expanded)
+
+    return torch.stack((x, y, z), dim=1)
 
 def normalize(vector: ndarray) -> ndarray:
     """
@@ -99,6 +124,19 @@ def generate_rays_between_points(points: ndarray) -> tuple[torch.Tensor, torch.T
     dirs = torch.Tensor(np.array(dirs)).to(torch.float32)
 
     return origins, dirs
+
+def generate_rays_between_points_tensor(origins: torch.Tensor, device: str) -> tuple[torch.Tensor, torch.Tensor]:
+    N = origins.shape[0]
+    
+    # Compute all pairwise vectors and mask to exlude self
+    vectors = origins.unsqueeze(0) - origins.unsqueeze(1)
+    mask = ~torch.eye(N, dtype=torch.bool, device=device)
+    
+    # Generate directions
+    dirs = vectors[mask].reshape(N, N - 1, 3)    
+    dirs = (dirs / torch.norm(dirs, dim=-1, keepdim=True)).unsqueeze(1)
+    
+    return dirs
 
 def generate_rays_between_sphere_points(N: int) -> tuple[torch.Tensor, torch.Tensor]:
     """
