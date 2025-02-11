@@ -5,11 +5,12 @@ import mesh_to_sdf
 import trimesh
 
 from numpy import ndarray
+from trimesh import Trimesh
 from open3d.geometry import TriangleMesh
 from open3d.utility import VerbosityLevel
 from sklearn.neighbors import BallTree
 from ray_field import CheckpointName, get_checkpoint
-from ifield.models import intersection_fields
+from ifield.models.intersection_fields import IntersectionFieldAutoDecoderModel
 from ifield.data.stanford import read as stanford_read
 
 DISTANCE_SAMPLES = 30000
@@ -33,13 +34,14 @@ def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, f
 # How to generate equidistributed points on the surface of a sphere
 # https://www.cmu.edu/biolphys/deserno/pdf/sphere_equi.pdf
 def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> ndarray:
-    """
+    """Generates n points equally distributed along the unit sphere
+
     Args:
-    - N: Number of points
-    - r: Radius
+        N (int): Number of origins, the resulting n is <= N
+        r (float, optional): Sphere radius. Defaults to 1.0.
 
     Returns:
-    - points (ndarray[n, 3])
+        ndarray: The resulting points (n, 3)
     """
     a: float = (4 * np.pi * r**2) / N
     d: float = np.sqrt(a)
@@ -58,7 +60,19 @@ def generate_equidistant_sphere_points(N: int, r: float = 1.0) -> ndarray:
     
     return np.array(points)
 
+# How to generate equidistributed points on the surface of a sphere
+# https://www.cmu.edu/biolphys/deserno/pdf/sphere_equi.pdf
 def generate_equidistant_sphere_points_tensor(N: int, device: str, r: float = 1.0) -> torch.Tensor:
+    """Generates n points equally distributed along the unit sphere
+
+    Args:
+        N (int): Number of origins, the resulting n is <= N
+        device (str): Which device to store the tensors in
+        r (float, optional): Sphere radius. Defaults to 1.0.
+
+    Returns:
+        torch.Tensor: The resulting points (n, 3)
+    """    
     a = (4 * np.pi * r**2) / N
     d = np.sqrt(a)
     m_theta = round(np.pi / d)
@@ -98,14 +112,17 @@ def normalize(vector: ndarray) -> ndarray:
     else:
         return vector / norm
 
-def generate_rays_between_points(points: ndarray) -> tuple[torch.Tensor, torch.Tensor]:
-    """
+def generate_rays_between_points(points: ndarray, device: str) -> tuple[torch.Tensor, torch.Tensor]:
+    """Generates ray directions for all pairs of points.
+
     Args:
-    - points (ndarray[n, 3])
+        points (ndarray): Origin points (n, 3)
+        device (str): Which device to store the tensors in
 
     Returns:
-    - origins (Tensor[n, 3], dtype=float32)
-    - directions (Tensor[n, 1, n-1, 3], dtype=float32)
+        tuple[torch.Tensor, torch.Tensor]
+            - Ray origins, converted from the points array
+            - Ray directions (n, 1, n-1, 3)
     """
     dirs: list = []
 
@@ -120,12 +137,21 @@ def generate_rays_between_points(points: ndarray) -> tuple[torch.Tensor, torch.T
             direction: ndarray = normalize(points[j] - points[i])
             dirs[i][0].append(direction)
     
-    origins = torch.Tensor(points).to(torch.float32)
-    dirs = torch.Tensor(np.array(dirs)).to(torch.float32)
+    origins = torch.from_numpy(points).to(device)
+    dirs = torch.from_numpy(np.array(dirs)).to(device)
 
     return origins, dirs
 
-def generate_rays_between_points_tensor(origins: torch.Tensor, device: str) -> tuple[torch.Tensor, torch.Tensor]:
+def generate_rays_between_points_tensor(origins: torch.Tensor, device: str) -> torch.Tensor:
+    """Generates ray directions for all pairs of origin points.
+
+    Args:
+        origins (torch.Tensor): Origin points (n, 3)
+        device (str): Which device to store the tensors in
+
+    Returns:
+        torch.Tensor: Ray directions (n, 1, n-1, 3)
+    """    
     N = origins.shape[0]
     
     # Compute all pairwise vectors and mask to exlude self
@@ -152,16 +178,17 @@ def generate_rays_between_sphere_points(N: int) -> tuple[torch.Tensor, torch.Ten
     return generate_rays_between_points(sphere_points)
 
 def poisson_surface_reconstruction(points: ndarray, normals: ndarray, depth: int, verbosity: VerbosityLevel = VerbosityLevel.Error) -> TriangleMesh:
-    """
+    """Perform a Poisson Surface Reconstruction.
+
     Args:
-    - points (ndarray[n, 3])
-    - normals (ndarray[n, 3])
-    - depth: Depth parameter in Poisson Surface Reconstruction (int)
-    - verbosity (VerbosityLevel)
+        points (ndarray): Surface points (n, 3)
+        normals (ndarray): Surface normals (n, 3)
+        depth (int): Depth parameter of the reconstruction.
+        verbosity (VerbosityLevel, optional): Level of terminal output during reconstruction. Defaults to VerbosityLevel.Error.
 
     Returns:
-    - mesh (TriangleMesh)
-    """
+        TriangleMesh: The generated mesh
+    """    
     # Create Open3D point cloud with normals
     point_cloud = o3d.geometry.PointCloud()
     point_cloud.points = o3d.utility.Vector3dVector(points)
@@ -178,14 +205,15 @@ def poisson_surface_reconstruction(points: ndarray, normals: ndarray, depth: int
     return mesh
 
 def chamfer_distance(a: ndarray, b: ndarray) -> float:
-    """
+    """Measure the Chamfer distance between two sets of points
+
     Args:
-        a (ndarray[n, 3])
-        b (ndarray[m, 3])
-    
+        a (ndarray): Set A (n, 3)
+        b (ndarray): Set B (m, 3)
+
     Returns:
-        float
-    """
+        float: The Chamfer distance
+    """    
     tree_a: BallTree = BallTree(a)
     tree_b: BallTree = BallTree(b)
 
@@ -195,14 +223,15 @@ def chamfer_distance(a: ndarray, b: ndarray) -> float:
     return dist_a.mean() + dist_b.mean()
 
 def hausdorff_distance(a: ndarray, b: ndarray) -> float:
-    """
+    """Measures the Hausdorff distance between two sets of points
+
     Args:
-        a (ndarray[n, 3])
-        b (ndarray[m, 3])
-    
+        a (ndarray): Set A (n, 3)
+        b (ndarray): Set B (m, 3)
+
     Returns:
-        float
-    """
+        float: The Hausdorff distance
+    """    
     tree_a: BallTree = BallTree(a)
     tree_b: BallTree = BallTree(b)
 
@@ -211,19 +240,48 @@ def hausdorff_distance(a: ndarray, b: ndarray) -> float:
 
     return max(np.max(dist_a), np.max(dist_b))
 
-def load_and_scale_stanford_mesh(model_name: CheckpointName):
+def load_and_scale_stanford_mesh(model_name: CheckpointName) -> Trimesh:
+    """Get the Stanford mesh for the model name, and scale it to the unit sphere.
+
+    Args:
+        model_name (CheckpointName): Valid model name of the Stanford mesh
+
+    Returns:
+        Trimesh: Scaled mesh
+    """    
     stanford_mesh = stanford_read.read_mesh(model_name)
     return mesh_to_sdf.scale_to_unit_sphere(stanford_mesh)
 
-def chamfer_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh) -> float:
+def chamfer_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh, samples: int) -> float:
+    """Measures the Chamfer distance between the generated mesh and the Stanford mesh.
+    Samples the two surfaces.
+
+    Args:
+        model_name (CheckpointName): Valid model name of the Stanford mesh
+        mesh (TriangleMesh): The generated mesh
+        samples (int): Number of surface samples to compare
+
+    Returns:
+        float: The Chamfer distance
+    """    
     stanford_mesh = load_and_scale_stanford_mesh(model_name)
 
-    stanford_samples = trimesh.sample.sample_surface_even(stanford_mesh, DISTANCE_SAMPLES)[0]
-    generated_samples = np.asarray(mesh.sample_points_uniformly(DISTANCE_SAMPLES).points)
+    stanford_samples = trimesh.sample.sample_surface_even(stanford_mesh, samples)[0]
+    generated_samples = np.asarray(mesh.sample_points_uniformly(samples).points)
 
     return chamfer_distance(stanford_samples, generated_samples)
 
 def hausdorff_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh) -> float:
+    """Measures the Hausdorff distance between the generated mesh and the Stanford mesh.
+    Compares the vertices of the two meshes.
+
+    Args:
+        model_name (CheckpointName): Valid model name of the Stanford mesh
+        mesh (TriangleMesh): The generated mesh
+
+    Returns:
+        float: The Hausdorff distance
+    """    
     stanford_mesh = load_and_scale_stanford_mesh(model_name)
 
     stanford_vertices = stanford_mesh.vertices
@@ -261,32 +319,78 @@ def generate_rays_in_cone(points: torch.Tensor, angles: torch.Tensor, device: st
 
     return points.to(torch.float32), directions.to(torch.float32)
 
-def init_model(model_name: CheckpointName) -> tuple[intersection_fields.IntersectionFieldAutoDecoderModel, str]:
+def init_model(model_name: CheckpointName) -> tuple[IntersectionFieldAutoDecoderModel, str]:
+    """Initializes the MARF model, storing it on the device and turning on eval-mode.
+
+    Args:
+        model_name (CheckpointName): Valid model name
+
+    Returns:
+        tuple[IntersectionFieldAutoDecoderModel, str]
+            - The MARF model
+            - The device
+    """    
     checkpoint = get_checkpoint(model_name)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = intersection_fields.IntersectionFieldAutoDecoderModel.load_from_checkpoint(checkpoint).to(device)
+    model = IntersectionFieldAutoDecoderModel.load_from_checkpoint(checkpoint).to(device)
     model.eval()
 
     return model, device
 
-def generate_sphere_rays(device: str, N: int) -> tuple[torch.Tensor, torch.Tensor]:
-    origins, dirs = generate_rays_between_sphere_points(N)
-    origins = origins.to(device)
-    dirs = dirs.to(device)
+def generate_sphere_rays(N: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
+    """Generates rays between all pairs of sphere points for the given N
 
+    Args:
+        N (int): Number of origins, the resulting n is <= N
+        device (str): The device to store tensors in
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor]
+            - Origin points (n, 3)
+            - Ray directions (n, 1, n-1, 3)
+    """
+    sphere_points = generate_equidistant_sphere_points(N)
+    
+    return generate_rays_between_points(sphere_points, device)
+
+def generate_sphere_rays_tensor(N: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
+    """Generates rays between all pairs of sphere points for the given N
+
+    Args:
+        N (int): Number of origins, the resulting n is <= N
+        device (str): The device to store tensors in
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor]
+            - Origin points (n, 3)
+            - Ray directions (n, 1, n-1, 3)
+    """    
+    origins = generate_equidistant_sphere_points_tensor(N, device)
+    dirs = generate_rays_between_points_tensor(origins, device)
+    
     return origins, dirs
 
-def get_max_cone_angles(sphere_points: torch.Tensor, intersections: torch.Tensor) -> torch.Tensor:
-    cam_forwards = -sphere_points / torch.norm(sphere_points, dim=1, keepdim=True)
+def get_max_cone_angles(origins: torch.Tensor, points: torch.Tensor) -> torch.Tensor:
+    """Calculate the maximum cone angles between the origins and the points.
+    For each origin, the angles between the origin -> (0, 0, 0) and origin -> points are measured. 
+
+    Args:
+        origins (torch.Tensor): The origins (n, 3)
+        points (torch.Tensor): The points (m, 3)
+
+    Returns:
+        torch.Tensor: The maximum angle for all origins (n)
+    """    
+    cam_forwards = -origins / torch.norm(origins, dim=1, keepdim=True)
 
     # Expand dimensions to align for broadcasting
-    intersections_exp = intersections.unsqueeze(0)
-    cam_pos_exp = sphere_points.unsqueeze(1)
+    points_exp = points.unsqueeze(0)
+    cam_pos_exp = origins.unsqueeze(1)
     cam_forward_exp = cam_forwards.unsqueeze(1)
 
     # Compute vectors angles
-    vecs_to_points = intersections_exp - cam_pos_exp
+    vecs_to_points = points_exp - cam_pos_exp
 
     dot_products = torch.sum(vecs_to_points * cam_forward_exp, dim=2)
     vec_norms = torch.norm(vecs_to_points, dim=2)

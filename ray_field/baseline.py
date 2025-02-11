@@ -110,7 +110,7 @@ def baseline_time(model_name: CheckpointName, N_values: list[int]) -> list[float
 
     return times
 
-def baseline_time_steps(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+def baseline_time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
     model, device = utils.init_model(model_name)
 
     times = []
