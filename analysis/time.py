@@ -2,7 +2,8 @@ import csv
 import argparse
 
 from ray_field import prescan_cone, baseline
-from analysis import ALGORITHM_LIST, N_VALUES, OBJECT_NAMES
+from ray_field.algorithm import Algorithm
+from analysis import ALGORITHM_LIST, N_VALUES, OBJECT_NAMES, class_dict
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -10,26 +11,15 @@ matplotlib.use('Agg')
 
 DIR_PATH = 'analysis/data/time'
 
-def compute_values_baseline() -> tuple[list[str], list[int], list[list[float]]]:
+def compute_values(algorithm: type[Algorithm]) -> tuple[list[str], list[int], list[list[float]]]:
     times = []
 
-    baseline.baseline(OBJECT_NAMES[0], 100)
+    # Warm up
+    algorithm.surface_reconstruction(OBJECT_NAMES[0], 100)
 
     for i in range(len(OBJECT_NAMES)):
         print(OBJECT_NAMES[i])
-        result = baseline.baseline_time(OBJECT_NAMES[i], N_VALUES)
-        times.append(result)
-
-    return OBJECT_NAMES, N_VALUES, times
-
-def compute_values_prescan_cone() -> tuple[list[str], list[int], list[list[float]]]:
-    times = []
-
-    prescan_cone.prescan_cone(OBJECT_NAMES[0], 100)
-
-    for i in range(len(OBJECT_NAMES)):
-        print(OBJECT_NAMES[i])
-        result = prescan_cone.prescan_cone_time(OBJECT_NAMES[i], N_VALUES)
+        result = algorithm.time(OBJECT_NAMES[i], N_VALUES)
         times.append(result)
 
     return OBJECT_NAMES, N_VALUES, times
@@ -62,8 +52,8 @@ def plot_results(object_names: list[str], N_values: list[int], times: list[list[
         ax.plot(N_values, entry, label=f'{object_names[i]}')
     
     ax.set_ylabel('Time (s)')
-    ax.set_xlim([0, 1000])
-    ax.set_ylim([0, 6.5])
+    ax.set_xlim([0, N_values[-1]])
+    #ax.set_ylim([0, 6.5])
     ax.set_xlabel('N')
     ax.set_title(algorithm)
     ax.legend(loc=(1.04, 0), title='Object')
@@ -89,12 +79,6 @@ if args.Load:
     object_names, N_values, times = load_results(args.Algorithm)
     plot_results(object_names, N_values, times, args.Algorithm)
 elif args.Save:
-    if args.Algorithm == 'baseline':
-        object_names, N_values, times = compute_values_baseline()
-    elif args.Algorithm == 'prescan_cone':
-        object_names, N_values, times = compute_values_prescan_cone()
-    else:
-        exit()
-    
+    object_names, N_values, times = compute_values(class_dict[args.Algorithm])
     save_results(object_names, N_values, times, args.Algorithm)
     plot_results(object_names, N_values, times, args.Algorithm)

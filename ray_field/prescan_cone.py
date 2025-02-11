@@ -2,19 +2,20 @@ import torch
 import numpy as np
 
 from ifield.models.intersection_fields import IntersectionFieldAutoDecoderModel
-from ray_field import Algorithm, CheckpointName, utils
+from ray_field import CheckpointName, utils
+from ray_field.algorithm import Algorithm
 from open3d.geometry import TriangleMesh
 from timeit import default_timer as timer
 from numpy import ndarray
 
 class PrescanCone(Algorithm):
-    prescan_n: int = 100
+    prescan_n: int = 60
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
         model, device = utils.init_model(model_name)
 
         with torch.no_grad():
-            origins, dirs = utils.generate_sphere_rays_tensor(device, PrescanCone.prescan_n)
+            origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
             intersections = PrescanCone._broad_scan(model, origins, dirs)
 
             origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
@@ -28,7 +29,7 @@ class PrescanCone(Algorithm):
         hit_rates = []
 
         with torch.no_grad():
-            origins, dirs = utils.generate_sphere_rays_tensor(device, PrescanCone.prescan_n)
+            origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
             broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
 
             init_sphere_n = origins.shape[0]
@@ -57,7 +58,7 @@ class PrescanCone(Algorithm):
         distances = []
 
         with torch.no_grad():
-            origins, dirs = utils.generate_sphere_rays_tensor(device, PrescanCone.prescan_n)
+            origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
             broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
 
             for N in N_values:
@@ -81,7 +82,7 @@ class PrescanCone(Algorithm):
         distances = []
 
         with torch.no_grad():
-            origins, dirs = utils.generate_sphere_rays_tensor(device, PrescanCone.prescan_n)
+            origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
             broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
 
             for N in N_values:
@@ -102,28 +103,33 @@ class PrescanCone(Algorithm):
     def time(model_name: CheckpointName, N_values: list[int]) -> list[float]:
         model, device = utils.init_model(model_name)
 
-        times = []
+        times = np.zeros(len(N_values))
 
         with torch.no_grad():
-            for N in N_values:
+            for i in range(len(N_values)):
+                N = N_values[i]
                 print(N, end='\t')
 
-                start_time = timer()
+                for _ in range(PrescanCone.time_samples):
+                    start_time = timer()
 
-                origins, dirs = utils.generate_sphere_rays_tensor(device, PrescanCone.prescan_n)
-                intersections = PrescanCone._broad_scan(model, origins, dirs)
+                    origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
+                    intersections = PrescanCone._broad_scan(model, origins, dirs)
 
-                origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
-                intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+                    origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
+                    intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
 
-                _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
-                time = timer() - start_time
+                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
+                    time = timer() - start_time
 
-                times.append(time)
-                print(f'{time:.6f}')
+                    times[i] = times[i] + time
+                    print(f'{time:.5f}', end='\t')
+                    torch.cuda.empty_cache()
+                
+                print()
                 torch.cuda.empty_cache()
 
-        return times
+        return times / PrescanCone.time_samples
 
     def time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
         """Measure execution time of the surface reconstruction divided in
@@ -147,7 +153,7 @@ class PrescanCone(Algorithm):
                 print(N, end='\t')
 
                 broad_start = timer()
-                origins, dirs = utils.generate_sphere_rays_tensor(device, PrescanCone.prescan_n)
+                origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
                 intersections = PrescanCone._broad_scan(model, origins, dirs)
                 broad_end = timer()
 
@@ -182,7 +188,7 @@ class PrescanCone(Algorithm):
         model, device = utils.init_model(model_name)
 
         with torch.no_grad():
-            origins, dirs = utils.generate_sphere_rays_tensor(device, PrescanCone.prescan_n)
+            origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
             intersections = PrescanCone._broad_scan(model, origins, dirs)
 
             origins = utils.generate_equidistant_sphere_points_tensor(N, device)
@@ -214,7 +220,7 @@ class PrescanCone(Algorithm):
 
         with torch.no_grad():
             for M in M_values:
-                origins, dirs = utils.generate_sphere_rays_tensor(device, PrescanCone.prescan_n)
+                origins, dirs = utils.generate_sphere_rays_tensor(M, device)
                 broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
                 prescan_distances = []
 
@@ -225,7 +231,7 @@ class PrescanCone(Algorithm):
                     intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
             
                     mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.chamfer_samples)
 
                     prescan_distances.append(distance)
                     print(f'{distance:.6f}')

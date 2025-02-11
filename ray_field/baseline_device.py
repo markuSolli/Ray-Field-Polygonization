@@ -1,21 +1,23 @@
 import torch
+import numpy as np
 
 from ifield.models.intersection_fields import IntersectionFieldAutoDecoderModel
-from ray_field import Algorithm, CheckpointName, utils
+from ray_field import CheckpointName, utils
+from ray_field.algorithm import Algorithm
 from open3d.geometry import TriangleMesh
 from timeit import default_timer as timer
 from numpy import ndarray
 
-class Baseline(Algorithm):
+class BaselineDevice(Algorithm):
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
         model, device = utils.init_model(model_name)
-        origins, dirs = utils.generate_sphere_rays(N, device)
+        origins, dirs = utils.generate_sphere_rays_tensor(N, device)
 
         with torch.no_grad():
-            intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
+            intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
 
-        return utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
+        return utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
 
     def hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[float]:
         model, device = utils.init_model(model_name)
@@ -25,12 +27,12 @@ class Baseline(Algorithm):
         with torch.no_grad():
             for N in N_values:
                 print(N, end='\t')
-                origins, dirs = utils.generate_sphere_rays(N, device)
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
 
                 sphere_n = origins.shape[0]
                 rays_n = sphere_n * (sphere_n - 1)
 
-                intersections, _ = Baseline._baseline_scan(model, origins, dirs)
+                intersections, _ = BaselineDevice._baseline_scan(model, origins, dirs)
                 
                 hit_rate = intersections.shape[0] / rays_n
                 hit_rates.append(hit_rate)
@@ -49,10 +51,10 @@ class Baseline(Algorithm):
             for N in N_values:
                 print(N, end='\t')
 
-                origins, dirs = utils.generate_sphere_rays(N, device)
-                intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
-                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
-                distance = utils.chamfer_distance_to_stanford(model_name, mesh, Baseline.chamfer_samples)
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                distance = utils.chamfer_distance_to_stanford(model_name, mesh, BaselineDevice.chamfer_samples)
 
                 distances.append(distance)
                 print(f'{distance:.6f}')
@@ -70,9 +72,9 @@ class Baseline(Algorithm):
             for N in N_values:
                 print(N, end='\t')
 
-                origins, dirs = utils.generate_sphere_rays(N, device)
-                intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
-                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
                 distance = utils.hausdorff_distance_to_stanford(model_name, mesh)
 
                 distances.append(distance)
@@ -84,24 +86,28 @@ class Baseline(Algorithm):
     def time(model_name: CheckpointName, N_values: list[int]) -> list[float]:
         model, device = utils.init_model(model_name)
 
-        times = []
+        times = np.zeros(len(N_values))
 
         with torch.no_grad():
-            for N in N_values:
+            for i in range(len(N_values)):
+                N = N_values[i]
                 print(N, end='\t')
 
-                start_time = timer()
+                for _ in range(BaselineDevice.time_samples):
+                    start_time = timer()
 
-                origins, dirs = utils.generate_sphere_rays(N, device)
-                intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
-                _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
-                time = timer() - start_time
+                    origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                    intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                    time = timer() - start_time
 
-                times.append(time)
-                print(f'{time:.6f}')
-                torch.cuda.empty_cache()
+                    times[i] = times[i] + time
+                    print(f'{time:.5f}', end='\t')
+                    torch.cuda.empty_cache()
+                
+                print()
 
-        return times
+        return times / BaselineDevice.time_samples
 
     def time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
         """Measure execution time of the surface reconstruction divided in
@@ -125,13 +131,13 @@ class Baseline(Algorithm):
                 print(N, end='\t')
 
                 ray_start = timer()
-                origins, dirs = utils.generate_sphere_rays(N, device)
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
                 ray_end = timer()
 
-                intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
+                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
                 scan_end = timer()
 
-                _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
+                _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
                 reconstruct_end = timer()
 
                 ray_time = ray_end - ray_start
@@ -143,30 +149,6 @@ class Baseline(Algorithm):
                 torch.cuda.empty_cache()
 
         return times
-    
-    @staticmethod
-    def radius(N: int) -> float:
-        """Finds the maximum angle between the origins pointing towards (0, 0, 0) and another origin.
-
-        Args:
-            N (int): Number of points to generate along the unit sphere
-
-        Returns:
-            float: The maximum angle
-        """        
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-        sphere_points = utils.generate_equidistant_sphere_points(N)
-        first_point = sphere_points[0]
-        other_points = sphere_points[1:]
-        
-        first_point = torch.from_numpy(first_point).unsqueeze(0).to(device)
-        other_points = torch.from_numpy(other_points).to(device)
-
-        max_angles = utils.get_max_cone_angles(first_point, other_points)
-        max_angles = max_angles.cpu().detach().numpy()
-        
-        return max_angles[0]
 
     @staticmethod
     def _baseline_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:

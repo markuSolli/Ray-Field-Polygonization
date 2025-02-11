@@ -12,6 +12,7 @@ from sklearn.neighbors import BallTree
 from ray_field import CheckpointName, get_checkpoint
 from ifield.models.intersection_fields import IntersectionFieldAutoDecoderModel
 from ifield.data.stanford import read as stanford_read
+from ray_field.baseline_device import BaselineDevice
 
 DISTANCE_SAMPLES = 30000
 
@@ -137,8 +138,8 @@ def generate_rays_between_points(points: ndarray, device: str) -> tuple[torch.Te
             direction: ndarray = normalize(points[j] - points[i])
             dirs[i][0].append(direction)
     
-    origins = torch.from_numpy(points).to(device)
-    dirs = torch.from_numpy(np.array(dirs)).to(device)
+    origins = torch.from_numpy(points).to(torch.float32).to(device)
+    dirs = torch.from_numpy(np.array(dirs)).to(torch.float32).to(device)
 
     return origins, dirs
 
@@ -251,6 +252,30 @@ def load_and_scale_stanford_mesh(model_name: CheckpointName) -> Trimesh:
     """    
     stanford_mesh = stanford_read.read_mesh(model_name)
     return mesh_to_sdf.scale_to_unit_sphere(stanford_mesh)
+
+def chamfer_distance_to_marf(model_name: CheckpointName, mesh: TriangleMesh, N: int) -> float:
+    """Measures the Chamfer distance between the generated mesh and the Stanford mesh.
+    Samples the two surfaces using the number of achieved intersections by scanning with N points.
+    This number will be N * (N-1) * hit_rate.
+
+    Args:
+        model_name (CheckpointName): Valid model name of the Stanford mesh
+        mesh (TriangleMesh): The generated mesh
+        N (int): Number of sphere points to generate
+
+    Returns:
+        float: The Chamfer distance
+    """    
+    model, device = init_model(model_name)
+
+    origins, dirs = generate_sphere_rays_tensor(N, device)
+    intersections, _ = BaselineDevice._baseline_scan(model, origins, dirs)
+    
+    samples = intersections.shape[0]
+    print(f'Samples: {samples}')
+    generated_samples = np.asarray(mesh.sample_points_uniformly(samples).points)
+
+    return chamfer_distance(intersections, generated_samples)
 
 def chamfer_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh, samples: int) -> float:
     """Measures the Chamfer distance between the generated mesh and the Stanford mesh.

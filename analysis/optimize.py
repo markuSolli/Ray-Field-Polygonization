@@ -2,7 +2,7 @@ import os
 import csv
 import argparse
 
-from ray_field import prescan_cone
+from ray_field.prescan_cone import PrescanCone
 from analysis import N_VALUES, OBJECT_NAMES
 
 import matplotlib
@@ -11,9 +11,9 @@ matplotlib.use('Agg')
 
 DIR_PATH = 'analysis/data/optimize/'
 
-def compute_values_prescan_cone(model_name: str) -> tuple[list[int], list[int], list[list[float]]]:
-    M_values = list(range(50, 201, 50))
-    distances = prescan_cone.prescan_cone_optimize(model_name, N_VALUES, M_values)
+def compute_values(model_name: str) -> tuple[list[int], list[int], list[list[float]]]:
+    M_values = list(range(15, 76, 15))
+    distances = PrescanCone.optimize(model_name, N_VALUES, M_values)
 
     return M_values, N_VALUES, distances
 
@@ -48,10 +48,10 @@ def plot_results(M_values: list[int], N_values: list[int], distances: list[list[
         ax.plot(N_values, entry, label=f'{M_values[i]}')
     
     ax.set_ylabel('Chamfer Distance')
-    ax.set_xlim([0, 1000])
+    ax.set_xlim([0, N_values[-1]])
     ax.set_xlabel('N')
     ax.set_title(model_name)
-    ax.legend(loc=(1.04, 0), title='Object')
+    ax.legend(loc=(1.04, 0), title='Broad scan N')
     plt.grid(linestyle='dotted', color='grey')
     fig.savefig(f'{DIR_PATH}{model_name}.png', bbox_inches="tight")
 
@@ -74,6 +74,6 @@ if args.Load:
     M_values, N_values, distances = load_results(args.Filename)
     plot_results(M_values, N_values, distances, args.Filename)
 elif args.Save:
-    M_values, N_values, distances = compute_values_prescan_cone(args.Filename)
+    M_values, N_values, distances = compute_values(args.Filename)
     save_results(M_values, N_values, distances, args.Filename)
     plot_results(M_values, N_values, distances, args.Filename)
