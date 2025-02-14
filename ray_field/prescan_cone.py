@@ -16,10 +16,10 @@ class PrescanCone(Algorithm):
 
         with torch.no_grad():
             origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
-            intersections = PrescanCone._broad_scan(model, origins, dirs)
+            broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
 
             origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
-            intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+            intersections, intersection_normals = PrescanCone._targeted_scan(model, broad_intersections, origins, dirs)
         
         return utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
 
@@ -39,7 +39,7 @@ class PrescanCone(Algorithm):
                 print(N, end='\t')
 
                 origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device)
-                intersections, _ = PrescanCone._targeted_scan(model, origins, dirs)
+                intersections, _ = PrescanCone._targeted_scan(model, broad_intersections, origins, dirs)
 
                 sphere_n = origins.shape[0]
                 rays_n = sphere_n * (sphere_n - 1)
@@ -68,7 +68,7 @@ class PrescanCone(Algorithm):
                 print(N, end='\t')
 
                 origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device)
-                intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+                intersections, intersection_normals = PrescanCone._targeted_scan(model, broad_intersections, origins, dirs)
         
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
                 distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.chamfer_samples)
@@ -95,7 +95,7 @@ class PrescanCone(Algorithm):
                 print(N, end='\t')
 
                 origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device)
-                intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+                intersections, intersection_normals = PrescanCone._targeted_scan(model, broad_intersections, origins, dirs)
         
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
                 distance = utils.hausdorff_distance_to_stanford(model_name, mesh)
@@ -123,10 +123,10 @@ class PrescanCone(Algorithm):
                     start_time = timer()
 
                     origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
-                    intersections = PrescanCone._broad_scan(model, origins, dirs)
+                    broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
 
                     origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
-                    intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+                    intersections, intersection_normals = PrescanCone._targeted_scan(model, broad_intersections, origins, dirs)
 
                     _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
                     time = timer() - start_time
@@ -167,11 +167,11 @@ class PrescanCone(Algorithm):
                 for _ in range(PrescanCone.time_samples):
                     broad_start = timer()
                     origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
-                    intersections = PrescanCone._broad_scan(model, origins, dirs)
+                    broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
                     broad_end = timer()
 
-                    origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
-                    intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+                    origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device)
+                    intersections, intersection_normals = PrescanCone._targeted_scan(model, broad_intersections, origins, dirs)
                     targeted_end = timer()
 
                     _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
@@ -251,7 +251,7 @@ class PrescanCone(Algorithm):
                     print(f'M: {M}\tN: {N}', end='\t')
 
                     origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device)
-                    intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+                    intersections, intersection_normals = PrescanCone._targeted_scan(model, broad_intersections, origins, dirs)
             
                     mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
                     distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.chamfer_samples)
@@ -280,9 +280,9 @@ class PrescanCone(Algorithm):
         Returns:
             torch.Tensor: Intersection points (m, 3)
         """        
-        result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
-        intersections = result[2]
-        is_intersecting = result[4]
+        result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = True)
+        intersections = result[0]
+        is_intersecting = result[1]
 
         is_intersecting = is_intersecting.flatten()
         return intersections.flatten(end_dim=2)[is_intersecting]
@@ -332,12 +332,13 @@ class PrescanCone(Algorithm):
         return origins.to(torch.float32), directions.to(torch.float32)
     
     @staticmethod
-    def _targeted_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:
+    def _targeted_scan(model: IntersectionFieldAutoDecoderModel, broad_intersectsions: torch.Tensor, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:
         """Perform a ray query on the MARF model to get intersections and normals.
         The result will be transferred to the CPU.
 
         Args:
             model (IntersectionFieldAutoDecoderModel): Initialized MARF model
+            broad_intersectsions (torch.Tensor): Intersections from the broad scan (x, 3)
             origins (torch.Tensor): Origins of the rays (n, 3)
             dirs (torch.Tensor): Ray directions (n, 1, n-1, 3)
 
@@ -353,7 +354,9 @@ class PrescanCone(Algorithm):
         is_intersecting = result[4]
 
         is_intersecting = is_intersecting.flatten()
-        intersections = intersections.flatten(end_dim=2)[is_intersecting].cpu().detach().numpy()
+        intersections = intersections.flatten(end_dim=2)[is_intersecting]
         intersection_normals = intersection_normals.flatten(end_dim=2)[is_intersecting].cpu().detach().numpy()
+
+        intersections = torch.cat((intersections, broad_intersectsions)).cpu().detach().numpy()
 
         return intersections, intersection_normals
