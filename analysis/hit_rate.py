@@ -1,8 +1,8 @@
 import csv
 import argparse
 
-from ray_field import prescan_cone, baseline
-from analysis import ALGORITHM_LIST, N_VALUES, OBJECT_NAMES
+from ray_field.algorithm import Algorithm
+from analysis import ALGORITHM_LIST, N_VALUES, OBJECT_NAMES, class_dict
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -10,22 +10,12 @@ matplotlib.use('Agg')
 
 DIR_PATH = 'analysis/data/hit_rate'
 
-def compute_values_baseline() -> tuple[list[str], list[int], list[list[float]]]:
+def compute_values(algorithm: type[Algorithm]) -> tuple[list[str], list[int], list[list[float]]]:
     hit_rates = []
 
     for i in range(len(OBJECT_NAMES)):
         print(OBJECT_NAMES[i])
-        result = baseline.baseline_hit_rate(OBJECT_NAMES[i], N_VALUES)
-        hit_rates.append(result)
-
-    return OBJECT_NAMES, N_VALUES, hit_rates
-
-def compute_values_prescan_cone() -> tuple[list[str], list[int], list[list[float]]]:
-    hit_rates = []
-
-    for i in range(len(OBJECT_NAMES)):
-        print(OBJECT_NAMES[i])
-        result = prescan_cone.prescan_cone_hit_rate(OBJECT_NAMES[i], N_VALUES)
+        result = algorithm.hit_rate(OBJECT_NAMES[i], N_VALUES)
         hit_rates.append(result)
 
     return OBJECT_NAMES, N_VALUES, hit_rates
@@ -58,7 +48,7 @@ def plot_results(object_names: list[str], N_values: list[int], hit_rates: list[l
         ax.plot(N_values, entry, label=f'{object_names[i]}')
     
     ax.set_ylabel('Hit Rate')
-    ax.set_xlim([0, 1000])
+    ax.set_xlim([0, N_values[-1]])
     ax.set_ylim([0, 1.0])
     ax.set_xlabel('N')
     ax.set_title(algorithm)
@@ -85,12 +75,6 @@ if args.Load:
     object_names, N_values, hit_rates = load_results(args.Algorithm)
     plot_results(object_names, N_values, hit_rates, args.Algorithm)
 elif args.Save:
-    if args.Algorithm == 'baseline':
-        object_names, N_values, hit_rates = compute_values_baseline()
-    elif args.Algorithm == 'prescan_cone':
-        object_names, N_values, hit_rates = compute_values_prescan_cone()
-    else:
-        exit()
-    
+    object_names, N_values, hit_rates = compute_values(class_dict[args.Algorithm])
     save_results(object_names, N_values, hit_rates, args.Algorithm)
     plot_results(object_names, N_values, hit_rates, args.Algorithm)
