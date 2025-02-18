@@ -18,7 +18,7 @@ class PrescanCone(Algorithm):
             origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
             broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
 
-            origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
+            origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device)
             intersections, intersection_normals = PrescanCone._targeted_scan(model, broad_intersections, origins, dirs)
         
         return utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
@@ -270,7 +270,7 @@ class PrescanCone(Algorithm):
 
     @staticmethod
     def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> torch.Tensor:
-        """Perform a ray query on the MARF model to get intersections and normals.
+        """Perform a ray query on the MARF model to get intersections.
 
         Args:
             model (IntersectionFieldAutoDecoderModel): Initialized MARF model
@@ -299,9 +299,9 @@ class PrescanCone(Algorithm):
 
         Returns:
             tuple[torch.Tensor, torch.Tensor]
-                - Intersection points (m, 3)
-                - Intersection normals (m, 3)
-        """        
+                - Ray origins (n, 3)
+                - Ray directions (n, 1, n-1, 3)
+        """ 
         origins = utils.generate_equidistant_sphere_points_tensor(N, device)
         max_angles = utils.get_max_cone_angles(origins, intersections)
 
