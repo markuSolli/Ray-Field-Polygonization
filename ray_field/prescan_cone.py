@@ -120,15 +120,18 @@ class PrescanCone(Algorithm):
                 print(N, end='\t')
 
                 for _ in range(PrescanCone.time_samples):
+                    torch.cuda.synchronize()
                     start_time = timer()
 
                     origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
                     broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
 
-                    origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
+                    origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device)
                     intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
 
                     _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
+
+                    torch.cuda.synchronize()
                     time = timer() - start_time
 
                     times[i] = times[i] + time

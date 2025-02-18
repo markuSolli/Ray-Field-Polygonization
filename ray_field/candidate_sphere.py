@@ -1,9 +1,11 @@
 import torch
+import numpy as np
 
 from ifield.models.intersection_fields import IntersectionFieldAutoDecoderModel
 from ray_field import CheckpointName, utils
 from ray_field.algorithm import Algorithm
 from open3d.geometry import TriangleMesh
+from timeit import default_timer as timer
 from numpy import ndarray
 
 class CandidateSphere(Algorithm):
@@ -23,16 +25,129 @@ class CandidateSphere(Algorithm):
         return utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
 
     def hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[float]:
-        pass
+        model, device = utils.init_model(model_name)
+
+        hit_rates = []
+
+        with torch.no_grad():
+            origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+            broad_intersections, broad_atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+
+            init_rays_n = dirs.shape[0] * dirs.shape[2]
+
+            for N in N_values:
+                print(N, end='\t')
+
+                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, broad_atom_indices, device)
+                origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+                intersections, _ = CandidateSphere._targeted_scan(model, origins, dirs)
+
+                rays_n = dirs.shape[0] * dirs.shape[2]
+
+                hit_rate = intersections.shape[0] / (rays_n + init_rays_n)
+                hit_rates.append(hit_rate)
+                print(f'{hit_rate:.3f}')
+
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+        
+        return hit_rates
 
     def chamfer(model_name: CheckpointName, N_values: list[int]) -> list[float]:
-        pass
+        model, device = utils.init_model(model_name)
+
+        distances = []
+
+        with torch.no_grad():
+            origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+            broad_intersections, broad_atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+
+            for N in N_values:
+                print(N, end='\t')
+
+                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, broad_atom_indices, device)
+                origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+                intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+        
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+                distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.chamfer_samples)
+
+                distances.append(distance)
+                print(f'{distance:.6f}')
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+
+        return distances
 
     def hausdorff(model_name: CheckpointName, N_values: list[int]) -> list[float]:
-        pass
+        model, device = utils.init_model(model_name)
+
+        distances = []
+
+        with torch.no_grad():
+            origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+            broad_intersections, broad_atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+
+            for N in N_values:
+                print(N, end='\t')
+
+                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, broad_atom_indices, device)
+                origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+                intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+        
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+                distance = utils.hausdorff_distance_to_stanford(model_name, mesh)
+
+                distances.append(distance)
+                print(f'{distance:.6f}')
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+
+        return distances
 
     def time(model_name: CheckpointName, N_values: list[int]) -> list[float]:
-        pass
+        model, device = utils.init_model(model_name)
+
+        times = np.zeros(len(N_values))
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+                print(N, end='\t')
+
+                for _ in range(CandidateSphere.time_samples):
+                    torch.cuda.synchronize()
+                    start_time = timer()
+
+                    origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+                    intersections, atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+
+                    radii, centers = CandidateSphere._generate_candidate_spheres(intersections, atom_indices, device)
+                    origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+                    intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+
+                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+                    
+                    torch.cuda.synchronize()
+                    time = timer() - start_time
+
+                    times[i] = times[i] + time
+                    print(f'{time:.5f}', end='\t')
+                    torch.cuda.empty_cache()
+                
+                print()
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+
+        return times / CandidateSphere.time_samples
 
     def time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
         pass
