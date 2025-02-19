@@ -150,7 +150,64 @@ class CandidateSphere(Algorithm):
         return times / CandidateSphere.time_samples
 
     def time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
-        pass
+        """Measure execution time of the surface reconstruction divided in
+            - Broad scan
+            - Targeted scan
+            - Surface reconstruction
+
+        Args:
+            model_name (CheckpointName): Valid model name
+            N_values (list[int]): N-values to test
+
+        Returns:
+            list[list[float]]: (N, 3) execution times
+        """
+        model, device = utils.init_model(model_name)
+
+        times = np.zeros((len(N_values), 3))
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+
+                for _ in range(CandidateSphere.time_samples):
+                    torch.cuda.synchronize()
+                    broad_start = timer()
+
+                    origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+                    intersections, atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+
+                    torch.cuda.synchronize()
+                    broad_end = timer()
+
+                    radii, centers = CandidateSphere._generate_candidate_spheres(intersections, atom_indices, device)
+                    origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+                    intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+
+                    torch.cuda.synchronize()
+                    targeted_end = timer()
+
+                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+
+                    torch.cuda.synchronize()
+                    reconstruct_end = timer()
+
+                    broad_time = broad_end - broad_start
+                    targeted_time = targeted_end - broad_end
+                    reconstruct_time = reconstruct_end - targeted_end
+
+                    times[i][0] = times[i][0] + broad_time
+                    times[i][1] = times[i][1] + targeted_time
+                    times[i][2] = times[i][2] + reconstruct_time
+                    print(f'N: {N}\t{broad_time:.4f}\t{targeted_time:.4f}\t{reconstruct_time:.4f}')
+                    torch.cuda.empty_cache()
+            
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+
+        return times / CandidateSphere.time_samples
 
     @staticmethod
     def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

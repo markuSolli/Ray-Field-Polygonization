@@ -103,11 +103,14 @@ class BaselineDevice(Algorithm):
                 print(N, end='\t')
 
                 for _ in range(BaselineDevice.time_samples):
+                    torch.cuda.synchronize(device)
                     start_time = timer()
 
                     origins, dirs = utils.generate_sphere_rays_tensor(N, device)
                     intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
                     _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+
+                    torch.cuda.synchronize(device)
                     time = timer() - start_time
 
                     times[i] = times[i] + time
@@ -144,14 +147,22 @@ class BaselineDevice(Algorithm):
                 N = N_values[i]
 
                 for _ in range(BaselineDevice.time_samples):
+                    torch.cuda.synchronize(device)
                     ray_start = timer()
+
                     origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+
+                    torch.cuda.synchronize(device)
                     ray_end = timer()
 
                     intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+
+                    torch.cuda.synchronize(device)
                     scan_end = timer()
 
                     _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+
+                    torch.cuda.synchronize(device)
                     reconstruct_end = timer()
 
                     ray_time = ray_end - ray_start

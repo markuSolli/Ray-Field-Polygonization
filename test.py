@@ -1,6 +1,3 @@
-import open3d as o3d
+import torch
 
-from ray_field.candidate_sphere import CandidateSphere
-
-mesh = CandidateSphere.surface_reconstruction('bunny', 100)
-o3d.visualization.draw_geometries([mesh])
+print(torch.cuda.get_device_name(torch.cuda.current_device()))
