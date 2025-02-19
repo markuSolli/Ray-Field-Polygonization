@@ -92,17 +92,18 @@ class Baseline(Algorithm):
 
         return distances
 
-    def time(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    def time(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
 
         times = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values))
 
         with torch.no_grad():
             for i in range(len(N_values)):
                 N = N_values[i]
                 print(N, end='\t')
 
-                for _ in range(Baseline.time_samples):
+                for j in range(Baseline.time_samples):
                     torch.cuda.synchronize()
                     start_time = timer()
 
@@ -112,6 +113,9 @@ class Baseline(Algorithm):
 
                     torch.cuda.synchronize()
                     time = timer() - start_time
+
+                    if j == 0:
+                        R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                     times[i] = times[i] + time
                     print(f'{time:.5f}', end='\t')
@@ -123,7 +127,9 @@ class Baseline(Algorithm):
         del model
         torch.cuda.empty_cache()
 
-        return times / Baseline.time_samples
+        times = times / Baseline.time_samples
+
+        return times, R_values
 
     def time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
         """Measure execution time of the surface reconstruction divided in

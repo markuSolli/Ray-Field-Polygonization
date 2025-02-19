@@ -68,15 +68,17 @@ class Algorithm(ABC):
 
     @staticmethod
     @abstractmethod
-    def time(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    def time(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
         """Measure exectution time of the surface reconstruction.
 
         Args:
             model_name (CheckpointName): Valid model name
-            N_values (list[int]): N-values to test
+            N_values (list[int]): N-values to test 
 
         Returns:
-            list[float]: Execution times corresponding to the list of N-values.
+            tuple[list[float], list[int]]
+                - Execution times
+                - Number of rays 
         """        
         pass
 

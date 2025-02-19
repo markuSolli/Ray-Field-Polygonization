@@ -109,22 +109,26 @@ class PrescanCone(Algorithm):
 
         return distances
 
-    def time(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    def time(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
 
         times = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values))
 
         with torch.no_grad():
             for i in range(len(N_values)):
                 N = N_values[i]
                 print(N, end='\t')
 
-                for _ in range(PrescanCone.time_samples):
+                for j in range(PrescanCone.time_samples):
                     torch.cuda.synchronize()
                     start_time = timer()
 
                     origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
                     intersections = PrescanCone._broad_scan(model, origins, dirs)
+
+                    if j == 0:
+                        R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                     origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
                     intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
@@ -133,6 +137,9 @@ class PrescanCone(Algorithm):
 
                     torch.cuda.synchronize()
                     time = timer() - start_time
+
+                    if j == 0:
+                        R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
 
                     times[i] = times[i] + time
                     print(f'{time:.5f}', end='\t')
@@ -144,7 +151,9 @@ class PrescanCone(Algorithm):
         del model
         torch.cuda.empty_cache()
 
-        return times / PrescanCone.time_samples
+        times = times / PrescanCone.time_samples
+
+        return times, R_values
 
     def time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
         """Measure execution time of the surface reconstruction divided in
