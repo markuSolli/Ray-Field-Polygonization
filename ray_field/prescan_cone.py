@@ -214,6 +214,47 @@ class PrescanCone(Algorithm):
 
         return times / PrescanCone.time_samples
     
+    def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float]]:
+        model, device = utils.init_model(model_name)
+
+        times = np.zeros(len(N_values))
+        distances = np.zeros(len(N_values))
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+
+                for _ in range(PrescanCone.time_samples):
+                    torch.cuda.synchronize()
+                    start_time = timer()
+
+                    origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
+                    intersections = PrescanCone._broad_scan(model, origins, dirs)
+
+                    origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
+                    intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
+
+                    torch.cuda.synchronize()
+                    time = timer() - start_time
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.chamfer_samples)
+
+                    times[i] = times[i] + time
+                    distances[i] = distances[i] + distance
+                    print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
+                    torch.cuda.empty_cache()
+                
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+
+        times = times / PrescanCone.time_samples
+        distances = distances / PrescanCone.time_samples
+
+        return times, distances
+    
     @staticmethod
     def radius(model_name: CheckpointName, N: int) -> list[float]:
         """Finds the maximum angle between the origins pointing towards (0, 0, 0) and the observed model after a broad scan.

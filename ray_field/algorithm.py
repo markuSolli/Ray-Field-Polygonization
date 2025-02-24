@@ -95,3 +95,19 @@ class Algorithm(ABC):
             list[list[float]]: (N, M) execution times, where M is the number of steps
         """        
         pass
+
+    @staticmethod
+    @abstractmethod
+    def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float]]:
+        """Measures the chamfer distance and the execution time.
+
+        Args:
+            model_name (CheckpointName): Valid model name
+            N_values (list[int]): N-values to test
+
+        Returns:
+            tuple[list[float], list[float]]
+                - Execution times
+                - Chamfer distances
+        """        
+        pass
