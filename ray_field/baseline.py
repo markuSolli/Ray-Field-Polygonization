@@ -57,7 +57,7 @@ class Baseline(Algorithm):
                 origins, dirs = utils.generate_sphere_rays(N, device)
                 intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
-                distance = utils.chamfer_distance_to_stanford(model_name, mesh, Baseline.chamfer_samples)
+                distance = utils.chamfer_distance_to_stanford(model_name, mesh, Baseline.dist_samples)
 
                 distances.append(distance)
                 print(f'{distance:.6f}')
@@ -81,7 +81,7 @@ class Baseline(Algorithm):
                 origins, dirs = utils.generate_sphere_rays(N, device)
                 intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
-                distance = utils.hausdorff_distance_to_stanford(model_name, mesh)
+                distance = utils.hausdorff_distance_to_stanford(model_name, mesh, Baseline.dist_samples)
 
                 distances.append(distance)
                 print(f'{distance:.6f}')
@@ -208,7 +208,7 @@ class Baseline(Algorithm):
 
                     torch.cuda.synchronize()
                     time = timer() - start_time
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, Baseline.chamfer_samples)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, Baseline.dist_samples)
 
                     times[i] = times[i] + time
                     distances[i] = distances[i] + distance

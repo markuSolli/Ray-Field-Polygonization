@@ -49,7 +49,7 @@ def plot_results(object_names: list[str], N_values: list[int], distances: list[l
     
     ax.set_ylabel('Hausdorff Distance')
     ax.set_xlim([0, N_values[-1]])
-    ax.set_ylim([0, 0.25])
+    ax.set_ylim([0, 0.04])
     ax.set_xlabel('N')
     ax.set_title(algorithm)
     ax.legend(loc=(1.04, 0), title='Object')

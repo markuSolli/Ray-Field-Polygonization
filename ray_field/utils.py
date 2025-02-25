@@ -296,23 +296,24 @@ def chamfer_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh,
 
     return chamfer_distance(stanford_samples, generated_samples)
 
-def hausdorff_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh) -> float:
+def hausdorff_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh, samples: int) -> float:
     """Measures the Hausdorff distance between the generated mesh and the Stanford mesh.
-    Compares the vertices of the two meshes.
+    Samples the two surfaces.
 
     Args:
         model_name (CheckpointName): Valid model name of the Stanford mesh
         mesh (TriangleMesh): The generated mesh
+        samples (int): Number of surface samples to compare
 
     Returns:
         float: The Hausdorff distance
     """    
     stanford_mesh = load_and_scale_stanford_mesh(model_name)
 
-    stanford_vertices = stanford_mesh.vertices
-    generated_vertices = np.asarray(mesh.vertices)
+    stanford_samples = trimesh.sample.sample_surface_even(stanford_mesh, samples)[0]
+    generated_samples = np.asarray(mesh.sample_points_uniformly(samples).points)
 
-    return hausdorff_distance(stanford_vertices, generated_vertices)
+    return chamfer_distance(stanford_samples, generated_samples)
 
 def generate_rays_in_cone(points: torch.Tensor, angles: torch.Tensor, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     N = points.shape[0]

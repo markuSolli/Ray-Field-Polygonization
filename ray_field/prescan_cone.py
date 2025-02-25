@@ -71,7 +71,7 @@ class PrescanCone(Algorithm):
                 intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
         
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
-                distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.chamfer_samples)
+                distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
 
                 distances.append(distance)
                 print(f'{distance:.6f}')
@@ -98,11 +98,14 @@ class PrescanCone(Algorithm):
                 intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
         
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
-                distance = utils.hausdorff_distance_to_stanford(model_name, mesh)
+                distance = utils.hausdorff_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
 
                 distances.append(distance)
                 print(f'{distance:.6f}')
                 torch.cuda.empty_cache()
+            
+            del origins, dirs, broad_intersections
+            torch.cuda.empty_cache()
         
         del model
         torch.cuda.empty_cache()
@@ -238,7 +241,7 @@ class PrescanCone(Algorithm):
 
                     torch.cuda.synchronize()
                     time = timer() - start_time
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.chamfer_samples)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
 
                     times[i] = times[i] + time
                     distances[i] = distances[i] + distance
@@ -315,7 +318,7 @@ class PrescanCone(Algorithm):
                     intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
             
                     mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.chamfer_samples)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
 
                     prescan_distances.append(distance)
                     print(f'{distance:.6f}')
