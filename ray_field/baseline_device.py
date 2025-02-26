@@ -179,6 +179,8 @@ class BaselineDevice(Algorithm):
                     times[i][1] = times[i][1] + scan_time
                     times[i][2] = times[i][2] + reconstruct_time
                     print(f'N: {N}\t{ray_time:.4f}\t{scan_time:.4f}\t{reconstruct_time:.4f}')
+
+                    del origins, dirs, intersections, intersection_normals
                     torch.cuda.empty_cache()
                 
                 torch.cuda.empty_cache()

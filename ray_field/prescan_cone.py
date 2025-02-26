@@ -258,49 +258,7 @@ class PrescanCone(Algorithm):
 
         return times, distances
     
-    @staticmethod
-    def radius(model_name: CheckpointName, N: int) -> list[float]:
-        """Finds the maximum angle between the origins pointing towards (0, 0, 0) and the observed model after a broad scan.
-
-        Args:
-            model_name (CheckpointName): Valid model name
-            N (int): Number of points to generate along the unit sphere
-
-        Returns:
-            list[float]: The maximum angles for all origins (n)
-        """
-        model, device = utils.init_model(model_name)
-
-        with torch.no_grad():
-            origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
-            intersections = PrescanCone._broad_scan(model, origins, dirs)
-
-            origins = utils.generate_equidistant_sphere_points_tensor(N, device)
-            max_angles = utils.get_max_cone_angles(origins, intersections)
-
-            max_angles = max_angles.cpu().detach().numpy()
-
-            print(f'{np.min(max_angles):.3f}\t{np.max(max_angles):.3f}')
-
-            torch.cuda.empty_cache()
-        
-        del model
-        torch.cuda.empty_cache()
-        
-        return max_angles
-
-    @staticmethod
-    def optimize(model_name: CheckpointName, N_values: list[int], M_values: list[int]) -> list[list[float]]:
-        """Calculate the chamfer distance between the generated mesh and the Stanford mesh for multiple combinations of N and M.
-
-        Args:
-            model_name (CheckpointName): A valid model name
-            N_values (list[int]): Number of points to generate during the targeted scan
-            M_values (list[int]): Number of points to generate during the broad scan
-
-        Returns:
-            list[list[float]]: The Chamfer distances (M, N)
-        """        
+    def optimize(model_name: CheckpointName, N_values: list[int], M_values: list[int]) -> list[list[float]]:   
         model, device = utils.init_model(model_name)
 
         distances = []
@@ -331,6 +289,37 @@ class PrescanCone(Algorithm):
         torch.cuda.empty_cache()
 
         return distances
+    
+    @staticmethod
+    def radius(model_name: CheckpointName, N: int) -> list[float]:
+        """Finds the maximum angle between the origins pointing towards (0, 0, 0) and the observed model after a broad scan.
+
+        Args:
+            model_name (CheckpointName): Valid model name
+            N (int): Number of points to generate along the unit sphere
+
+        Returns:
+            list[float]: The maximum angles for all origins (n)
+        """
+        model, device = utils.init_model(model_name)
+
+        with torch.no_grad():
+            origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
+            intersections = PrescanCone._broad_scan(model, origins, dirs)
+
+            origins = utils.generate_equidistant_sphere_points_tensor(N, device)
+            max_angles = utils.get_max_cone_angles(origins, intersections)
+
+            max_angles = max_angles.cpu().detach().numpy()
+
+            print(f'{np.min(max_angles):.3f}\t{np.max(max_angles):.3f}')
+
+            torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+        
+        return max_angles
 
     @staticmethod
     def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> torch.Tensor:

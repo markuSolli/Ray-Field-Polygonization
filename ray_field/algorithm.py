@@ -111,3 +111,18 @@ class Algorithm(ABC):
                 - Chamfer distances
         """        
         pass
+
+    @staticmethod
+    @abstractmethod
+    def optimize(model_name: CheckpointName, N_values: list[int], M_values: list[int]) -> list[list[float]]:
+        """Calculate the chamfer distance between the generated mesh and the Stanford mesh for multiple combinations of N and M.
+
+        Args:
+            model_name (CheckpointName): A valid model name
+            N_values (list[int]): Number of points to generate during the targeted scan
+            M_values (list[int]): The variable to optimize for
+
+        Returns:
+            list[list[float]]: The Chamfer distances (M, N)
+        """
+        pass

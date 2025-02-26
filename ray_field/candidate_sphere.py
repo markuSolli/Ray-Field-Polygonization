@@ -9,7 +9,7 @@ from timeit import default_timer as timer
 from numpy import ndarray
 
 class CandidateSphere(Algorithm):
-    prescan_n: int = 60
+    prescan_n: int = 120
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
         model, device = utils.init_model(model_name)
@@ -31,14 +31,14 @@ class CandidateSphere(Algorithm):
 
         with torch.no_grad():
             origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-            broad_intersections, broad_atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+            broad_intersections, atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
 
             init_rays_n = dirs.shape[0] * dirs.shape[2]
 
             for N in N_values:
                 print(N, end='\t')
 
-                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, broad_atom_indices, device)
+                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, atom_indices, device)
                 origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
                 intersections, _ = CandidateSphere._targeted_scan(model, origins, dirs)
 
@@ -62,12 +62,12 @@ class CandidateSphere(Algorithm):
 
         with torch.no_grad():
             origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-            broad_intersections, broad_atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+            broad_intersections, atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
 
             for N in N_values:
                 print(N, end='\t')
 
-                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, broad_atom_indices, device)
+                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, atom_indices, device)
                 origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
                 intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
         
@@ -90,12 +90,12 @@ class CandidateSphere(Algorithm):
 
         with torch.no_grad():
             origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-            broad_intersections, broad_atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+            broad_intersections, atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
 
             for N in N_values:
                 print(N, end='\t')
 
-                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, broad_atom_indices, device)
+                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, atom_indices, device)
                 origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
                 intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
         
@@ -259,6 +259,39 @@ class CandidateSphere(Algorithm):
         distances = distances / CandidateSphere.time_samples
 
         return times, distances
+    
+    def optimize(model_name: CheckpointName, N_values: list[int], M_values: list[int]) -> list[list[float]]:
+        model, device = utils.init_model(model_name)
+
+        distances = []
+
+        with torch.no_grad():
+            for M in M_values:
+                origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+                broad_intersections, atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+                prescan_distances = []
+
+                for N in N_values:
+                    print(f'M: {M}\tN: {N}', end='\t')
+
+                    radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, atom_indices, device)
+                    origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+                    intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+            
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
+
+                    prescan_distances.append(distance)
+                    print(f'{distance:.6f}')
+                    torch.cuda.empty_cache()
+                
+                distances.append(prescan_distances)
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+
+        return distances
 
     @staticmethod
     def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

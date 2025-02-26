@@ -225,6 +225,37 @@ class Baseline(Algorithm):
 
         return times, distances
     
+    def optimize(model_name: CheckpointName, N_values: list[int], M_values: list[int]) -> list[list[float]]:
+        model, device = utils.init_model(model_name)
+
+        distances = []
+
+        with torch.no_grad():
+            for N in N_values:
+                origins, dirs = utils.generate_sphere_rays(N, device)
+                intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
+                depth_distances = []
+
+                for M in M_values:
+                    print(f'N: {N}\tM: {M}', end='\t')
+            
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, M)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, Baseline.dist_samples)
+
+                    depth_distances.append(distance)
+                    print(f'{distance:.6f}')
+                    torch.cuda.empty_cache()
+                
+                distances.append(depth_distances)
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+
+        distances = np.array(distances)
+
+        return distances.T
+    
     @staticmethod
     def radius(N: int) -> float:
         """Finds the maximum angle between the origins pointing towards (0, 0, 0) and another origin.
