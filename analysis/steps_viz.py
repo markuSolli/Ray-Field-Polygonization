@@ -110,38 +110,36 @@ def visalize_candidate_sphere(model_name: str):
     # Broad scan
     model, device = utils.init_model(model_name)
     origins, dirs = utils.generate_sphere_rays(PRESCAN_N, device)
-    intersections, atom_indices = CandidateSphere._broad_scan(model, origins, dirs)
+    intersections = CandidateSphere._broad_scan(model, origins, dirs)
     intersections = intersections.cpu().detach().numpy()
-    atom_indices = atom_indices.cpu().detach().numpy()
-    colors = np.array([index_to_color(idx) for idx in atom_indices])
-    surface_cloud = trimesh.points.PointCloud(intersections, colors=colors)
+    colors = np.array([index_to_color(i) for i in range(16)], dtype=np.uint8)
+    colors = np.repeat(colors[np.newaxis, :, :], intersections.shape[0], axis=0)
+    intersections_flat = intersections.reshape(-1, 3)
+    colors = colors.reshape(-1, 3)
+    surface_cloud = trimesh.points.PointCloud(intersections_flat, colors=colors)
     scene = trimesh.Scene([surface_cloud])
     scene.show()
 
     # Candidate spheres
     intersections = torch.from_numpy(intersections).to(device)
-    atom_indices = torch.from_numpy(atom_indices).to(device)
-    radii, centers = CandidateSphere._generate_candidate_spheres(intersections, atom_indices, device)
+    radii, centers = CandidateSphere._generate_candidate_spheres(intersections, device)
     radii = radii.cpu().detach().numpy()
     centers = centers.cpu().detach().numpy()
     
     spheres = []
     for i in range(16):
-        if (radii[i] > 0):
-            color = index_to_color(i)
-            color.append(64)
+        color = index_to_color(i)
+        color.append(64)
 
-            sphere = trimesh.primitives.Sphere(radii[i], centers[i])
-            sphere.visual.face_colors[:] = np.array(color)
-            spheres.append(sphere)
+        sphere = trimesh.primitives.Sphere(radii[i], centers[i])
+        sphere.visual.face_colors[:] = np.array(color)
+        spheres.append(sphere)
 
     scene = trimesh.Scene([surface_cloud, spheres])
     scene.show()
 
     # Generate rays
-    valid_mask = radii > 0
-    valid_candidates = valid_mask.sum().item()
-    M = (N_POINTS - 1) // valid_candidates
+    M = (N_POINTS - 1) // 16
     sphere_points: ndarray = utils.generate_equidistant_sphere_points(N_POINTS)
     point_cloud = trimesh.points.PointCloud(sphere_points, colors=[0, 0, 255])
     radii = torch.from_numpy(radii).to(device)
@@ -151,7 +149,7 @@ def visalize_candidate_sphere(model_name: str):
     dirs = dirs.cpu().detach().numpy()
     k = 0
     paths = []
-    for i in range(valid_candidates):
+    for i in range(16):
         color = index_to_color(i)
         for j in range(i * M, (i + 1) * M):
             path = trimesh.load_path([origins[k], origins[k] + dirs[k,0,j] / 2.0])

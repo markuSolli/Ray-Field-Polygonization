@@ -1,3 +1,3 @@
-import torch
+from ray_field.candidate_sphere import CandidateSphere
 
-print(torch.cuda.get_device_name(torch.cuda.current_device()))
+mesh = CandidateSphere.surface_reconstruction('bunny', 100)

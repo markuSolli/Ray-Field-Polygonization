@@ -217,22 +217,26 @@ class PrescanCone(Algorithm):
 
         return times / PrescanCone.time_samples
     
-    def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float]]:
+    def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float], list[int]]:
         model, device = utils.init_model(model_name)
 
         times = np.zeros(len(N_values))
         distances = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             for i in range(len(N_values)):
                 N = N_values[i]
 
-                for _ in range(PrescanCone.time_samples):
+                for j in range(PrescanCone.time_samples):
                     torch.cuda.synchronize()
                     start_time = timer()
 
                     origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
                     intersections = PrescanCone._broad_scan(model, origins, dirs)
+
+                    if j == 0:
+                        R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                     origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
                     intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
@@ -241,11 +245,16 @@ class PrescanCone(Algorithm):
 
                     torch.cuda.synchronize()
                     time = timer() - start_time
+
                     distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
+                    if j == 0:
+                        R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
 
                     times[i] = times[i] + time
                     distances[i] = distances[i] + distance
                     print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
+
+                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
                 
                 torch.cuda.empty_cache()
@@ -256,7 +265,7 @@ class PrescanCone(Algorithm):
         times = times / PrescanCone.time_samples
         distances = distances / PrescanCone.time_samples
 
-        return times, distances
+        return times, distances, R_values
     
     def optimize(model_name: CheckpointName, N_values: list[int], M_values: list[int]) -> list[list[float]]:   
         model, device = utils.init_model(model_name)

@@ -190,17 +190,18 @@ class BaselineDevice(Algorithm):
 
         return times / BaselineDevice.time_samples
     
-    def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float]]:
+    def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float], list[int]]:
         model, device = utils.init_model(model_name)
 
         times = np.zeros(len(N_values))
         distances = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             for i in range(len(N_values)):
                 N = N_values[i]
 
-                for _ in range(BaselineDevice.time_samples):
+                for j in range(BaselineDevice.time_samples):
                     torch.cuda.synchronize()
                     start_time = timer()
 
@@ -210,11 +211,16 @@ class BaselineDevice(Algorithm):
 
                     torch.cuda.synchronize()
                     time = timer() - start_time
+
                     distance = utils.chamfer_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
+                    if j == 0:
+                        R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                     times[i] = times[i] + time
                     distances[i] = distances[i] + distance
                     print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
+
+                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
                 
                 torch.cuda.empty_cache()
@@ -225,7 +231,7 @@ class BaselineDevice(Algorithm):
         times = times / BaselineDevice.time_samples
         distances = distances / BaselineDevice.time_samples
 
-        return times, distances
+        return times, distances, R_values
 
     @staticmethod
     def _baseline_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:

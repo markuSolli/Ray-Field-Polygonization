@@ -17,7 +17,7 @@ def compute_values(model_name: CheckpointName, algorithm: type[Algorithm]) -> tu
     if issubclass(algorithm, Baseline):
         M_values = list(range(6, 15, 2))
     else:
-        M_values = list(range(30, 151, 30))
+        M_values = list(range(10, 51, 10))
     
     distances = algorithm.optimize(model_name, N_VALUES, M_values)
 
