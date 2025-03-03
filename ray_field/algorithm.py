@@ -38,7 +38,7 @@ class Algorithm(ABC):
 
     @staticmethod
     @abstractmethod
-    def chamfer(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    def chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
         """Calculate the Chamfer Distance between the reconstructed surface and the Stanford mesh.
         Will sample both surfaces with M points and compare those.
 
@@ -47,7 +47,9 @@ class Algorithm(ABC):
             N_values (list[int]): N-values to test
 
         Returns:
-            list[float]: Distances corresponding to the list of N-values.
+        tuple[list[float], list[int]]
+                - Distances
+                - Number of rays 
         """        
         pass
 

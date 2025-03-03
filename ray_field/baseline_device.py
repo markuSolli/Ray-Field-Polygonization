@@ -45,13 +45,15 @@ class BaselineDevice(Algorithm):
 
         return hit_rates
 
-    def chamfer(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    def chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
 
-        distances = []
+        distances = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
-            for N in N_values:
+            for i in range(len(N_values)):
+                N = N_values[i]
                 print(N, end='\t')
 
                 origins, dirs = utils.generate_sphere_rays_tensor(N, device)
@@ -59,7 +61,8 @@ class BaselineDevice(Algorithm):
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
                 distance = utils.chamfer_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
 
-                distances.append(distance)
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+                distances[i] = distance
                 print(f'{distance:.6f}')
 
                 torch.cuda.empty_cache()
@@ -67,7 +70,7 @@ class BaselineDevice(Algorithm):
         del model
         torch.cuda.empty_cache()
 
-        return distances
+        return distances, R_values
 
     def hausdorff(model_name: CheckpointName, N_values: list[int]) -> list[float]:
         model, device = utils.init_model(model_name)
@@ -96,7 +99,7 @@ class BaselineDevice(Algorithm):
         model, device = utils.init_model(model_name)
 
         times = np.zeros(len(N_values))
-        R_values = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             for i in range(len(N_values)):
