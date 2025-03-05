@@ -65,17 +65,18 @@ class CandidateSphere(Algorithm):
         with torch.no_grad():
             origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
             broad_intersections, broad_normals, sphere_centers = CandidateSphere._broad_scan(model, origins, dirs)
+            radii, centers = CandidateSphere._generate_candidate_spheres(sphere_centers, device)
+
+            R_values.fill(dirs.shape[0] * dirs.shape[2])
+
+            del sphere_centers
+            torch.cuda.empty_cache()
+
 
             for i in range(len(N_values)):
                 N = N_values[i]
                 print(N, end='\t')
 
-                origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-                broad_intersections, broad_normals, sphere_centers = CandidateSphere._broad_scan(model, origins, dirs)
-
-                R_values[i] = dirs.shape[0] * dirs.shape[2]
-
-                radii, centers = CandidateSphere._generate_candidate_spheres(sphere_centers, device)
                 origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, '16')
                 intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
                 intersections, intersection_normals = CandidateSphere._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
