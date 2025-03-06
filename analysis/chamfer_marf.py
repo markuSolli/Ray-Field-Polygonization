@@ -15,7 +15,6 @@ def compute_values(algorithm: type[Algorithm]) -> tuple[list[str], list[int], li
     R_values = []
 
     for i in range(len(OBJECT_NAMES)):
-        print(OBJECT_NAMES[i])
         d, R = algorithm.chamfer_marf(OBJECT_NAMES[i], N_VALUES)
         distances.append(d)
         R_values.append(R)

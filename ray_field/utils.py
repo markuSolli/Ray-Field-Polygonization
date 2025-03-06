@@ -14,11 +14,10 @@ from ifield.models.intersection_fields import IntersectionFieldAutoDecoderModel
 from ifield.data.stanford import read as stanford_read
 
 chamfer_dict = {
-    'bunny': 275,
-    'happy_buddha': 275,
-    'armadillo': 275,
-    'dragon': 275,
-    'lucy': 275
+    'bunny': 282,
+    'happy_buddha': 318,
+    'armadillo': 316,
+    'dragon': 288,
 }
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
@@ -264,9 +263,6 @@ def chamfer_distance_to_marf_1(model_name: CheckpointName) -> ndarray:
 
     origins, dirs = generate_sphere_rays_tensor(N, device)
     intersections = baseline_scan(model, origins, dirs)
-    
-    samples = intersections.shape[0]
-    print(f'N: {N}\tSamples: {samples}')
     
     return intersections
 

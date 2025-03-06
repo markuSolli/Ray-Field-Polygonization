@@ -244,13 +244,15 @@ class BaselineDevice(Algorithm):
 
         marf_intersections = utils.chamfer_distance_to_marf_1(model_name)
 
+        print(f'{model_name}\t{marf_intersections.shape[0]}')
+
         with torch.no_grad():
             for i in range(len(N_values)):
                 N = N_values[i]
 
                 origins, dirs = utils.generate_sphere_rays_tensor(N, device)
                 intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
-                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, 12)
                 distance = utils.chamfer_distance_to_marf_2(intersections, mesh)
 
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
