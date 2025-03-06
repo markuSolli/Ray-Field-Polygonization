@@ -8,16 +8,15 @@ from open3d.geometry import TriangleMesh
 from timeit import default_timer as timer
 from numpy import ndarray
 
-class BaselineDevice(Algorithm):
-
+class BallPivoting(Algorithm):
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
         model, device = utils.init_model(model_name)
         origins, dirs = utils.generate_sphere_rays_tensor(N, device)
 
         with torch.no_grad():
-            intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+            intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
 
-        return utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+        return utils.ball_pivoting_algorithm(intersections, intersection_normals)
 
     def hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[float]:
         model, device = utils.init_model(model_name)
@@ -32,7 +31,7 @@ class BaselineDevice(Algorithm):
                 sphere_n = origins.shape[0]
                 rays_n = sphere_n * (sphere_n - 1)
 
-                intersections, _ = BaselineDevice._baseline_scan(model, origins, dirs)
+                intersections, _ = BallPivoting._baseline_scan(model, origins, dirs)
                 
                 hit_rate = intersections.shape[0] / rays_n
                 hit_rates.append(hit_rate)
@@ -57,9 +56,9 @@ class BaselineDevice(Algorithm):
                 print(N, end='\t')
 
                 origins, dirs = utils.generate_sphere_rays_tensor(N, device)
-                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
-                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
-                distance = utils.chamfer_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
+                intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
+                mesh = utils.ball_pivoting_algorithm(intersections, intersection_normals)
+                distance = utils.chamfer_distance_to_stanford(model_name, mesh, BallPivoting.dist_samples)
 
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
                 distances[i] = distance
@@ -82,9 +81,9 @@ class BaselineDevice(Algorithm):
                 print(N, end='\t')
 
                 origins, dirs = utils.generate_sphere_rays_tensor(N, device)
-                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
-                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
-                distance = utils.hausdorff_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
+                intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
+                mesh = utils.ball_pivoting_algorithm(intersections, intersection_normals)
+                distance = utils.hausdorff_distance_to_stanford(model_name, mesh, BallPivoting.dist_samples)
 
                 distances.append(distance)
                 print(f'{distance:.6f}')
@@ -106,13 +105,13 @@ class BaselineDevice(Algorithm):
                 N = N_values[i]
                 print(N, end='\t')
 
-                for j in range(BaselineDevice.time_samples):
+                for j in range(BallPivoting.time_samples):
                     torch.cuda.synchronize(device)
                     start_time = timer()
 
                     origins, dirs = utils.generate_sphere_rays_tensor(N, device)
-                    intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
-                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                    intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
+                    mesh = utils.ball_pivoting_algorithm(intersections, intersection_normals)
 
                     torch.cuda.synchronize(device)
                     time = timer() - start_time
@@ -122,6 +121,8 @@ class BaselineDevice(Algorithm):
 
                     times[i] = times[i] + time
                     print(f'{time:.5f}', end='\t')
+
+                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
                 
                 print()
@@ -130,7 +131,7 @@ class BaselineDevice(Algorithm):
         del model
         torch.cuda.empty_cache()
 
-        times = times / BaselineDevice.time_samples
+        times = times / BallPivoting.time_samples
 
         return times, R_values
 
@@ -155,7 +156,7 @@ class BaselineDevice(Algorithm):
             for i in range(len(N_values)):
                 N = N_values[i]
 
-                for _ in range(BaselineDevice.time_samples):
+                for _ in range(BallPivoting.time_samples):
                     torch.cuda.synchronize(device)
                     ray_start = timer()
 
@@ -164,12 +165,12 @@ class BaselineDevice(Algorithm):
                     torch.cuda.synchronize(device)
                     ray_end = timer()
 
-                    intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+                    intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
 
                     torch.cuda.synchronize(device)
                     scan_end = timer()
 
-                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                    mesh = utils.ball_pivoting_algorithm(intersections, intersection_normals)
 
                     torch.cuda.synchronize(device)
                     reconstruct_end = timer()
@@ -183,7 +184,7 @@ class BaselineDevice(Algorithm):
                     times[i][2] = times[i][2] + reconstruct_time
                     print(f'N: {N}\t{ray_time:.4f}\t{scan_time:.4f}\t{reconstruct_time:.4f}')
 
-                    del origins, dirs, intersections, intersection_normals
+                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
                 
                 torch.cuda.empty_cache()
@@ -191,7 +192,7 @@ class BaselineDevice(Algorithm):
         del model
         torch.cuda.empty_cache()
 
-        return times / BaselineDevice.time_samples
+        return times / BallPivoting.time_samples
     
     def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float], list[int]]:
         model, device = utils.init_model(model_name)
@@ -204,18 +205,18 @@ class BaselineDevice(Algorithm):
             for i in range(len(N_values)):
                 N = N_values[i]
 
-                for j in range(BaselineDevice.time_samples):
+                for j in range(BallPivoting.time_samples):
                     torch.cuda.synchronize()
                     start_time = timer()
 
                     origins, dirs = utils.generate_sphere_rays_tensor(N, device)
-                    intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
-                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                    intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
+                    mesh = utils.ball_pivoting_algorithm(intersections, intersection_normals)
 
                     torch.cuda.synchronize()
                     time = timer() - start_time
 
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, BallPivoting.dist_samples)
                     if j == 0:
                         R_values[i] = dirs.shape[0] * dirs.shape[2]
 
@@ -231,8 +232,8 @@ class BaselineDevice(Algorithm):
         del model
         torch.cuda.empty_cache()
 
-        times = times / BaselineDevice.time_samples
-        distances = distances / BaselineDevice.time_samples
+        times = times / BallPivoting.time_samples
+        distances = distances / BallPivoting.time_samples
 
         return times, distances, R_values
     
@@ -251,8 +252,8 @@ class BaselineDevice(Algorithm):
                 N = N_values[i]
 
                 origins, dirs = utils.generate_sphere_rays_tensor(N, device)
-                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
-                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
+                mesh = utils.ball_pivoting_algorithm(intersections, intersection_normals)
                 distance = utils.chamfer_distance_to_marf_2(intersections, mesh)
 
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
@@ -266,6 +267,44 @@ class BaselineDevice(Algorithm):
         torch.cuda.empty_cache()
 
         return distances, R_values
+    
+    @staticmethod
+    def optimize_radii(model_name: CheckpointName, N_values: list[int], M_values: list[list[float]]) -> list[list[float]]:
+        model, device = utils.init_model(model_name)
+        distances = []
+
+        with torch.no_grad():
+            for N in N_values:
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
+                depth_distances = []
+
+                del origins, dirs
+                torch.cuda.empty_cache()
+
+                for M in M_values:
+                    print(f'N: {N}\tM: {M}', end='\t')
+            
+                    mesh = utils.ball_pivoting_algorithm(intersections, intersection_normals, M)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, BallPivoting.dist_samples)
+
+                    depth_distances.append(distance)
+                    print(f'{distance:.6f}')
+
+                    del mesh
+                    torch.cuda.empty_cache()
+                
+                distances.append(depth_distances)
+
+                del intersections, intersection_normals
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+
+        distances = np.array(distances)
+
+        return distances.T
 
     @staticmethod
     def _baseline_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:

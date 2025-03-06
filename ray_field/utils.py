@@ -209,6 +209,22 @@ def poisson_surface_reconstruction(points: ndarray, normals: ndarray, depth: int
 
     return mesh
 
+def ball_pivoting_algorithm(points: ndarray, normals: ndarray, radii: list[float] = [0.02, 0.04, 0.08, 0.16], verbosity: VerbosityLevel = VerbosityLevel.Error) -> TriangleMesh:
+    # Create Open3D point cloud with normals
+    point_cloud = o3d.geometry.PointCloud()
+    point_cloud.points = o3d.utility.Vector3dVector(points)
+    point_cloud.normals = o3d.utility.Vector3dVector(normals)
+
+    # Run Ball Pivoting Algorithm
+    with o3d.utility.VerbosityContextManager(verbosity) as cm:
+        mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(point_cloud, o3d.utility.DoubleVector(radii))
+
+    # Fix normals and assign color
+    mesh.compute_vertex_normals()
+    mesh.paint_uniform_color(np.array([[0.5],[0.5],[0.5]]))
+
+    return mesh
+
 def chamfer_distance(a: ndarray, b: ndarray) -> float:
     """Measure the Chamfer distance between two sets of points
 
