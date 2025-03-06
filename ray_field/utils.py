@@ -12,9 +12,14 @@ from sklearn.neighbors import BallTree
 from ray_field import CheckpointName, get_checkpoint
 from ifield.models.intersection_fields import IntersectionFieldAutoDecoderModel
 from ifield.data.stanford import read as stanford_read
-from ray_field.baseline_device import BaselineDevice
 
-DISTANCE_SAMPLES = 30000
+chamfer_dict = {
+    'bunny': 275,
+    'happy_buddha': 275,
+    'armadillo': 275,
+    'dragon': 275,
+    'lucy': 275
+}
 
 def spherical_to_cartesian(r: float, theta: float, phi: float) -> tuple[float, float, float]:
     """
@@ -253,26 +258,20 @@ def load_and_scale_stanford_mesh(model_name: CheckpointName) -> Trimesh:
     stanford_mesh = stanford_read.read_mesh(model_name)
     return mesh_to_sdf.scale_to_unit_sphere(stanford_mesh)
 
-def chamfer_distance_to_marf(model_name: CheckpointName, mesh: TriangleMesh, N: int) -> float:
-    """Measures the Chamfer distance between the generated mesh and the Stanford mesh.
-    Samples the two surfaces using the number of achieved intersections by scanning with N points.
-    This number will be N * (N-1) * hit_rate.
-
-    Args:
-        model_name (CheckpointName): Valid model name of the Stanford mesh
-        mesh (TriangleMesh): The generated mesh
-        N (int): Number of sphere points to generate
-
-    Returns:
-        float: The Chamfer distance
-    """    
+def chamfer_distance_to_marf_1(model_name: CheckpointName) -> ndarray:
     model, device = init_model(model_name)
+    N = chamfer_dict[model_name]
 
     origins, dirs = generate_sphere_rays_tensor(N, device)
-    intersections, _ = BaselineDevice._baseline_scan(model, origins, dirs)
+    intersections = baseline_scan(model, origins, dirs)
     
     samples = intersections.shape[0]
-    print(f'Samples: {samples}')
+    print(f'N: {N}\tSamples: {samples}')
+    
+    return intersections
+
+def chamfer_distance_to_marf_2(intersections: ndarray, mesh: TriangleMesh) -> float:
+    samples = intersections.shape[0]
     generated_samples = np.asarray(mesh.sample_points_uniformly(samples).points)
 
     return chamfer_distance(intersections, generated_samples)
@@ -427,3 +426,25 @@ def get_max_cone_angles(origins: torch.Tensor, points: torch.Tensor) -> torch.Te
 
     angles = torch.acos(cos_theta)
     return torch.max(angles, dim=1).values  
+
+def baseline_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:
+    """Perform a ray query on the MARF model to get intersections.
+    The result will be transferred to the CPU.
+
+    Args:
+        model (IntersectionFieldAutoDecoderModel): Initialized MARF model
+        origins (torch.Tensor): Origins of the rays (n, 3)
+        dirs (torch.Tensor): Ray directions (n, 1, n-1, 3)
+
+    Returns:
+        ndarray: Intersection points (m, 3)
+    """        
+    result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = True)
+    
+    intersections = result[0]
+    is_intersecting = result[1]
+
+    is_intersecting = is_intersecting.flatten()
+    intersections = intersections.flatten(end_dim=2)[is_intersecting].cpu().detach().numpy()
+    
+    return intersections

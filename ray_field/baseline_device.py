@@ -235,6 +235,35 @@ class BaselineDevice(Algorithm):
         distances = distances / BaselineDevice.time_samples
 
         return times, distances, R_values
+    
+    def chamfer_marf(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+        model, device = utils.init_model(model_name)
+
+        distances = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
+
+        marf_intersections = utils.chamfer_distance_to_marf_1(model_name)
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                distance = utils.chamfer_distance_to_marf_2(intersections, mesh)
+
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+                distances[i] = distance
+                print(f'N: {N}\t{distance:.6f}')
+
+                del origins, dirs, intersections, intersection_normals, mesh
+                torch.cuda.empty_cache()
+        
+        del model, marf_intersections
+        torch.cuda.empty_cache()
+
+        return distances, R_values
 
     @staticmethod
     def _baseline_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:
