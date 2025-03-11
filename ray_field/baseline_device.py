@@ -236,6 +236,43 @@ class BaselineDevice(Algorithm):
 
         return times, distances, R_values
     
+    def time_hausdorff(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float], list[int]]:
+        model, device = utils.init_model(model_name)
+
+        times = np.zeros(len(N_values))
+        distances = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+
+                torch.cuda.synchronize()
+                start_time = timer()
+
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+
+                torch.cuda.synchronize()
+                time = timer() - start_time
+
+                distance = utils.hausdorff_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+
+                times[i] = time
+                distances[i] = distance
+                
+                print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
+
+                del origins, dirs, intersections, intersection_normals, mesh
+                torch.cuda.empty_cache()
+                        
+        del model
+        torch.cuda.empty_cache()
+
+        return times, distances, R_values
+    
     def chamfer_marf(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
 

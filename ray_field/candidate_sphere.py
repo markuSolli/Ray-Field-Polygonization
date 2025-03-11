@@ -256,7 +256,7 @@ class CandidateSphere(Algorithm):
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                 radii, centers = CandidateSphere._generate_candidate_spheres(sphere_centers, device)
-                origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+                origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, '16')
                 intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
                 intersections, intersection_normals = CandidateSphere._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
 
@@ -266,6 +266,51 @@ class CandidateSphere(Algorithm):
                 time = timer() - start_time
 
                 distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
+                R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
+
+                times[i] = time
+                distances[i] = distance
+                
+                print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
+
+                del origins, dirs, broad_intersections, broad_normals, sphere_centers, radii, centers, intersections, intersection_normals, mesh
+                torch.cuda.empty_cache()
+                        
+        del model
+        torch.cuda.empty_cache()
+
+        return times, distances, R_values
+    
+    def time_hausdorff(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float], list[int]]:
+        model, device = utils.init_model(model_name)
+
+        times = np.zeros(len(N_values))
+        distances = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+
+                torch.cuda.synchronize()
+                start_time = timer()
+
+                origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+                broad_intersections, broad_normals, sphere_centers = CandidateSphere._broad_scan(model, origins, dirs)
+
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+
+                radii, centers = CandidateSphere._generate_candidate_spheres(sphere_centers, device)
+                origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, '16')
+                intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+                intersections, intersection_normals = CandidateSphere._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
+
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+
+                torch.cuda.synchronize()
+                time = timer() - start_time
+
+                distance = utils.hausdorff_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
                 R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
 
                 times[i] = time
