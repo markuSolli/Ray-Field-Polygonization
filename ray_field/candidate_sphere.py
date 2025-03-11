@@ -247,44 +247,37 @@ class CandidateSphere(Algorithm):
             for i in range(len(N_values)):
                 N = N_values[i]
 
-                for j in range(CandidateSphere.time_samples):
-                    torch.cuda.synchronize()
-                    start_time = timer()
+                torch.cuda.synchronize()
+                start_time = timer()
 
-                    origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-                    broad_intersections, broad_normals, sphere_centers = CandidateSphere._broad_scan(model, origins, dirs)
+                origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+                broad_intersections, broad_normals, sphere_centers = CandidateSphere._broad_scan(model, origins, dirs)
 
-                    if j == 0:
-                        R_values[i] = dirs.shape[0] * dirs.shape[2]
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
 
-                    radii, centers = CandidateSphere._generate_candidate_spheres(sphere_centers, device)
-                    origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
-                    intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
-                    intersections, intersection_normals = CandidateSphere._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
+                radii, centers = CandidateSphere._generate_candidate_spheres(sphere_centers, device)
+                origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+                intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+                intersections, intersection_normals = CandidateSphere._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
 
-                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
 
-                    torch.cuda.synchronize()
-                    time = timer() - start_time
+                torch.cuda.synchronize()
+                time = timer() - start_time
 
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
-                    if j == 0:
-                        R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
+                distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
+                R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
 
-                    times[i] = times[i] + time
-                    distances[i] = distances[i] + distance
-                    print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
-
-                    del origins, dirs, broad_intersections, broad_normals, sphere_centers, radii, centers, intersections, intersection_normals, mesh
-                    torch.cuda.empty_cache()
+                times[i] = time
+                distances[i] = distance
                 
+                print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
+
+                del origins, dirs, broad_intersections, broad_normals, sphere_centers, radii, centers, intersections, intersection_normals, mesh
                 torch.cuda.empty_cache()
-        
+                        
         del model
         torch.cuda.empty_cache()
-
-        times = times / CandidateSphere.time_samples
-        distances = distances / CandidateSphere.time_samples
 
         return times, distances, R_values
     

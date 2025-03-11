@@ -1,3 +1,3 @@
-from ray_field.candidate_sphere import CandidateSphere
+from ray_field.baseline_device import BaselineDevice
 
-mesh = CandidateSphere.surface_reconstruction('bunny', 100)
+mesh = BaselineDevice.surface_reconstruction('bunny', 100)

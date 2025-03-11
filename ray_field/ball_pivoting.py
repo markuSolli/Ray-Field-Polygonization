@@ -95,6 +95,7 @@ class BallPivoting(Algorithm):
         return distances
 
     def time(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+        N_values = list(range(50, 401, 50))
         model, device = utils.init_model(model_name)
 
         times = np.zeros(len(N_values))
@@ -195,6 +196,7 @@ class BallPivoting(Algorithm):
         return times / BallPivoting.time_samples
     
     def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float], list[int]]:
+        N_values = list(range(50, 451, 50))
         model, device = utils.init_model(model_name)
 
         times = np.zeros(len(N_values))
@@ -205,35 +207,29 @@ class BallPivoting(Algorithm):
             for i in range(len(N_values)):
                 N = N_values[i]
 
-                for j in range(BallPivoting.time_samples):
-                    torch.cuda.synchronize()
-                    start_time = timer()
+                torch.cuda.synchronize()
+                start_time = timer()
 
-                    origins, dirs = utils.generate_sphere_rays_tensor(N, device)
-                    intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
-                    mesh = utils.ball_pivoting_algorithm(intersections, intersection_normals)
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                intersections, intersection_normals = BallPivoting._baseline_scan(model, origins, dirs)
+                mesh = utils.ball_pivoting_algorithm(intersections, intersection_normals)
 
-                    torch.cuda.synchronize()
-                    time = timer() - start_time
+                torch.cuda.synchronize()
+                time = timer() - start_time
 
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, BallPivoting.dist_samples)
-                    if j == 0:
-                        R_values[i] = dirs.shape[0] * dirs.shape[2]
+                distance = utils.chamfer_distance_to_stanford(model_name, mesh, BallPivoting.dist_samples)
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
 
-                    times[i] = times[i] + time
-                    distances[i] = distances[i] + distance
-                    print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
-
-                    del origins, dirs, intersections, intersection_normals, mesh
-                    torch.cuda.empty_cache()
+                times[i] = time
+                distances[i] = distance
                 
+                print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
+
+                del origins, dirs, intersections, intersection_normals, mesh
                 torch.cuda.empty_cache()
-        
+                        
         del model
         torch.cuda.empty_cache()
-
-        times = times / BallPivoting.time_samples
-        distances = distances / BallPivoting.time_samples
 
         return times, distances, R_values
     

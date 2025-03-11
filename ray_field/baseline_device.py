@@ -71,14 +71,16 @@ class BaselineDevice(Algorithm):
         torch.cuda.empty_cache()
 
         return distances, R_values
-
-    def hausdorff(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    
+    def hausdorff(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
 
-        distances = []
+        distances = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
-            for N in N_values:
+            for i in range(len(N_values)):
+                N = N_values[i]
                 print(N, end='\t')
 
                 origins, dirs = utils.generate_sphere_rays_tensor(N, device)
@@ -86,14 +88,16 @@ class BaselineDevice(Algorithm):
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
                 distance = utils.hausdorff_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
 
-                distances.append(distance)
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+                distances[i] = distance
                 print(f'{distance:.6f}')
-                torch.cuda.empty_cache()
 
+                torch.cuda.empty_cache()
+        
         del model
         torch.cuda.empty_cache()
 
-        return distances
+        return distances, R_values
 
     def time(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
@@ -112,7 +116,7 @@ class BaselineDevice(Algorithm):
 
                     origins, dirs = utils.generate_sphere_rays_tensor(N, device)
                     intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
-                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
 
                     torch.cuda.synchronize(device)
                     time = timer() - start_time
@@ -122,6 +126,8 @@ class BaselineDevice(Algorithm):
 
                     times[i] = times[i] + time
                     print(f'{time:.5f}', end='\t')
+
+                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
                 
                 print()
@@ -204,35 +210,29 @@ class BaselineDevice(Algorithm):
             for i in range(len(N_values)):
                 N = N_values[i]
 
-                for j in range(BaselineDevice.time_samples):
-                    torch.cuda.synchronize()
-                    start_time = timer()
+                torch.cuda.synchronize()
+                start_time = timer()
 
-                    origins, dirs = utils.generate_sphere_rays_tensor(N, device)
-                    intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
-                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
 
-                    torch.cuda.synchronize()
-                    time = timer() - start_time
+                torch.cuda.synchronize()
+                time = timer() - start_time
 
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
-                    if j == 0:
-                        R_values[i] = dirs.shape[0] * dirs.shape[2]
+                distance = utils.chamfer_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
 
-                    times[i] = times[i] + time
-                    distances[i] = distances[i] + distance
-                    print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
-
-                    del origins, dirs, intersections, intersection_normals, mesh
-                    torch.cuda.empty_cache()
+                times[i] = time
+                distances[i] = distance
                 
+                print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
+
+                del origins, dirs, intersections, intersection_normals, mesh
                 torch.cuda.empty_cache()
-        
+                        
         del model
         torch.cuda.empty_cache()
-
-        times = times / BaselineDevice.time_samples
-        distances = distances / BaselineDevice.time_samples
 
         return times, distances, R_values
     

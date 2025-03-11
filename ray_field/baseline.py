@@ -199,35 +199,29 @@ class Baseline(Algorithm):
             for i in range(len(N_values)):
                 N = N_values[i]
 
-                for j in range(Baseline.time_samples):
-                    torch.cuda.synchronize()
-                    start_time = timer()
+                torch.cuda.synchronize()
+                start_time = timer()
 
-                    origins, dirs = utils.generate_sphere_rays(N, device)
-                    intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
-                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
+                origins, dirs = utils.generate_sphere_rays(N, device)
+                intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
+                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
 
-                    torch.cuda.synchronize()
-                    time = timer() - start_time
+                torch.cuda.synchronize()
+                time = timer() - start_time
 
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, Baseline.dist_samples)
-                    if j == 0:
-                        R_values[i] = dirs.shape[0] * dirs.shape[2]
+                distance = utils.chamfer_distance_to_stanford(model_name, mesh, Baseline.dist_samples)
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
 
-                    times[i] = times[i] + time
-                    distances[i] = distances[i] + distance
-                    print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
-
-                    del origins, dirs, intersections, intersection_normals, mesh
-                    torch.cuda.empty_cache()
+                times[i] = time
+                distances[i] = distance
                 
+                print(f'N: {N}\tTime: {time:.5f}\tDistance: {distance:.5f}')
+
+                del origins, dirs, intersections, intersection_normals, mesh
                 torch.cuda.empty_cache()
         
         del model
         torch.cuda.empty_cache()
-
-        times = times / Baseline.time_samples
-        distances = distances / Baseline.time_samples
 
         return times, distances, R_values
     

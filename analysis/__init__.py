@@ -13,5 +13,5 @@ class_dict = {
     'baseline_device': BaselineDevice,
     'prescan_cone': PrescanCone,
     'candidate_sphere': CandidateSphere,
-    'ball_pivoting': BallPivoting,
+    'ball_pivoting': BallPivoting
 }
