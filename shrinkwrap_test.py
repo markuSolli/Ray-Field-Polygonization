@@ -68,7 +68,7 @@ with torch.no_grad():
             normal = torch.cross(vertices[face[2]] - vertices[face[0]], vertices[face[1]] - vertices[face[0]])
             normal = normal / torch.norm(normal)
 
-            origins[i] = center - normal * 0.3
+            origins[i] = center
             dirs[i][0][0] = normal
 
         origin_cloud = trimesh.points.PointCloud(origins, colors=[0, 0, 255])
