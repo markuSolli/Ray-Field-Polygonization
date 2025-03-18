@@ -33,6 +33,7 @@ with torch.no_grad():
     origins, dirs = laptop_utils.generate_sphere_rays_tensor(100, device)
     intersections, atom_indices = marf_scan(model, origins, dirs)
 
+    # Sort intersections by candidate index
     candidates = []
     for i in range(16):
         candidates.append([])
@@ -40,6 +41,7 @@ with torch.no_grad():
     for i in range(intersections.shape[0]):
         candidates[atom_indices[i]].append(intersections[i])
     
+    # Construct convex hulls for each candidate
     candidate_clouds = []
     convex_hulls = []
     for i in range(16):
