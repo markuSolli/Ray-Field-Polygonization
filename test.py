@@ -8,7 +8,7 @@ from numpy import ndarray
 from scipy.spatial import KDTree
 
 EPS = 0.05
-DELTA = 0.02
+DELTA = 0.04
 
 def marf_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False)
@@ -90,6 +90,15 @@ def visualize_x_new(vertices: ndarray, normals: ndarray, faces: list, x_proj: li
     scene = trimesh.Scene([mesh, x_proj_cloud, x_new_cloud, normal_path])
     scene.show()
 
+def visualize_new_face(vertices: ndarray, normals: ndarray, faces: list, a, b, c) -> None:
+    mesh = trimesh.Trimesh(vertices, faces, vertex_normals=normals)
+    mesh.fix_normals()
+
+    face_path = trimesh.load_path([a, b, c, a])
+
+    scene = trimesh.Scene([mesh, face_path])
+    scene.show(flags={'wireframe': True})
+
 def visualize_circumsphere(vertices: ndarray, normals: ndarray, faces: list, edge: list, x_new: ndarray, circumcenter: ndarray, radius: float) -> None:
     mesh = trimesh.Trimesh(vertices, faces, vertex_normals=normals)
     mesh.fix_normals()
@@ -102,7 +111,49 @@ def visualize_circumsphere(vertices: ndarray, normals: ndarray, faces: list, edg
     scene = trimesh.Scene([mesh, x_new_cloud, face_path, circumsphere])
     scene.show()
 
-def marching_triangles(vertices: ndarray, normals: ndarray, faces: list, edges: list, edge_to_face: list):
+def get_kd_query_indices(a, b, c, vertices, face_normal) -> list:
+    mid_AB = (b + a) / 2.0 
+    mid_AC = (c + a) / 2.0
+
+    bisector_AB = np.cross(b - a, face_normal)
+    bisector_AC = np.cross(c - a, face_normal)
+
+    A_matrix = np.vstack([bisector_AB, -bisector_AC]).T
+    b_vector = mid_AC - mid_AB
+
+    try:
+        t = np.linalg.lstsq(A_matrix, b_vector, rcond=None)[0]
+        circumcenter = mid_AB + (t[0] * bisector_AB)
+    except np.linalg.LinAlgError:
+        print("Points are co-linear")
+        return []
+
+    radius = np.linalg.norm(a - circumcenter)
+    tree = KDTree(vertices)
+    return tree.query_ball_point(circumcenter, radius)
+
+def delaunay_constraint(a, b_idx, c_idx, vertices, face_normal) -> tuple[bool, list]:
+    kd_query_indices = get_kd_query_indices(a, vertices[b_idx], vertices[c_idx], vertices, face_normal)
+
+    for index in [b_idx, c_idx]:
+        if index in kd_query_indices:
+            kd_query_indices.remove(index)
+    
+    if len(kd_query_indices) == 0:
+        return True, []
+    else:
+        return False, kd_query_indices
+
+def delaunay_constraint_existing(a_idx, b_idx, c_idx, vertices, face_normal) -> bool:
+    kd_query_indices = get_kd_query_indices(vertices[a_idx], vertices[b_idx], vertices[c_idx], vertices, face_normal)
+
+    for index in [a_idx, b_idx, c_idx]:
+        if index in kd_query_indices:
+            kd_query_indices.remove(index)
+    
+    return (len(kd_query_indices) == 0)
+
+def marching_triangles(model: IntersectionFieldAutoDecoderModel, device: str, vertices: ndarray, normals: ndarray, faces: list, edges: list, edge_to_face: list):
     i = -1
 
     while ((i + 1) < len(edges)):
@@ -130,25 +181,18 @@ def marching_triangles(vertices: ndarray, normals: ndarray, faces: list, edges: 
 
         x_proj = midpoint + (perpendicular * DELTA)
 
-        #visualize_x_proj(vertices, normals, faces, midpoint, x_proj)
-
         # Evaluate nearest point x_new
         origins = torch.tensor((x_proj + face_normal), device=device, dtype=torch.float32).view(-1, 3)
         dirs = torch.tensor((-face_normal), device=device, dtype=torch.float32).view(1, 1, -1, 3)
-
-        #visualize_x_proj_evaluation(vertices, normals, faces, x_proj, face_normal)
 
         intersections, intersection_normals, is_intersecting = marf_scan(model, origins, dirs)
 
         if not is_intersecting.all():
             print("Nearest point evaluation did not intersect.")
-            visualize_x_proj_evaluation(vertices, normals, faces, x_proj, face_normal)
             continue
     
         x_new = intersections.cpu().detach().numpy()[0]
         x_new_normal = intersection_normals.cpu().detach().numpy()[0]
-
-        #visualize_x_new(vertices, normals, faces, x_proj, x_new, x_new_normal)
 
         # Terminate if surface orientation has flipped
         if np.dot(face_normal, x_new_normal) < 0:
@@ -156,56 +200,46 @@ def marching_triangles(vertices: ndarray, normals: ndarray, faces: list, edges: 
             continue
 
         # Apply 3D Delaunay surface constraint to T_new
-        mid_AB = (vertices[edge[0]] + x_new) / 2.0 
-        mid_AC = (vertices[edge[1]] + x_new) / 2.0
-
-        bisector_AB = np.cross(vertices[edge[0]] - x_new, face_normal)
-        bisector_AC = np.cross(vertices[edge[1]] - x_new, face_normal)
-
-        A_matrix = np.vstack([bisector_AB, -bisector_AC]).T
-        b_vector = mid_AC - mid_AB
-
-        try:
-            t = np.linalg.lstsq(A_matrix, b_vector, rcond=None)[0]
-            circumcenter = mid_AB + (t[0] * bisector_AB)
-        except np.linalg.LinAlgError:
-            print("Points are co-linear")
-            continue
-
-        radius = np.linalg.norm(x_new - circumcenter)
-
-        #visualize_circumsphere(vertices, normals, faces, edge, x_new, circumcenter, radius)
-
-        tree = KDTree(vertices)
-        kd_query_indices = tree.query_ball_point(circumcenter, radius)
-
-        for index in [edge[0], edge[1]]:
-            if index in kd_query_indices:
-                kd_query_indices.remove(index)
+        isConstraintPassed, query_indices = delaunay_constraint(x_new, edge[0], edge[1], vertices, face_normal)
         
-        if len(kd_query_indices) > 0:
-            print("Failed 3D Delaunay surface constraint")
-            visualize_circumsphere(vertices, normals, faces, edge, x_new, circumcenter, radius)
+        if isConstraintPassed:
+            # Add T_new to M
+            new_vertex_idx = vertices.shape[0]
+            new_face_idx = len(faces)
 
-            # TODO: Try to create triangle with query vertices instead of x_new
+            faces.append([edge[0], edge[1], new_vertex_idx])
+            edges.append([edge[0], new_vertex_idx])
+            edges.append([edge[1], new_vertex_idx])
+            edge_to_face.append(new_face_idx)
+            edge_to_face.append(new_face_idx)
 
-            continue
+            vertices = np.vstack((vertices, x_new))
+            normals = np.vstack((normals, x_new_normal))
+        else:
+            for query_index in query_indices:
+                if delaunay_constraint_existing(query_index, edge[0], edge[1], vertices, face_normal):
+                    if ([query_index, edge[0]] not in edges) and ([edge[0], query_index] not in edges):
+                        existing_vertex = edge[0]
+                    elif ([query_index, edge[1]] not in edges) and ([edge[1], query_index] not in edges):
+                        existing_vertex = edge[1]
+                    else:
+                        print("Both edges already exists")
+                        continue
 
-        # Add T_new to M
-        new_vertex_idx = vertices.shape[0]
-        new_face_idx = len(faces)
+                    # Add T_new to M
+                    new_face_idx = len(faces)
 
-        faces.append([edge[0], edge[1], new_vertex_idx])
-        edges.append([edge[0], new_vertex_idx])
-        edges.append([edge[1], new_vertex_idx])
-        edge_to_face.append(new_face_idx)
-        edge_to_face.append(new_face_idx)
+                    faces.append([edge[0], edge[1], query_index])
+                    edges.append([existing_vertex, query_index])
+                    edge_to_face.append(new_face_idx)
 
-        vertices = np.vstack((vertices, x_new))
-        normals = np.vstack((normals, x_new_normal))
-
+                    break
+    
     visualize(vertices, normals, faces)
 
-model, device = laptop_utils.init_model('bunny')
-vertices, normals, faces, edges, edge_to_face = construct_seed_triangle(model, device)
-marching_triangles(vertices, normals, faces, edges, edge_to_face)
+def main():
+    model, device = laptop_utils.init_model('bunny')
+    vertices, normals, faces, edges, edge_to_face = construct_seed_triangle(model, device)
+    marching_triangles(model, device, vertices, normals, faces, edges, edge_to_face)
+
+main()
