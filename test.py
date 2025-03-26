@@ -134,10 +134,7 @@ def get_kd_query_indices(a, b, c, vertices, face_normal) -> list:
 
 def delaunay_constraint(a, b_idx, c_idx, vertices, face_normal) -> tuple[bool, list]:
     kd_query_indices = get_kd_query_indices(a, vertices[b_idx], vertices[c_idx], vertices, face_normal)
-
-    for index in [b_idx, c_idx]:
-        if index in kd_query_indices:
-            kd_query_indices.remove(index)
+    kd_query_indices = [idx for idx in kd_query_indices if idx not in {b_idx, c_idx}]
     
     if len(kd_query_indices) == 0:
         return True, []
@@ -146,10 +143,7 @@ def delaunay_constraint(a, b_idx, c_idx, vertices, face_normal) -> tuple[bool, l
 
 def delaunay_constraint_existing(a_idx, b_idx, c_idx, vertices, face_normal) -> bool:
     kd_query_indices = get_kd_query_indices(vertices[a_idx], vertices[b_idx], vertices[c_idx], vertices, face_normal)
-
-    for index in [a_idx, b_idx, c_idx]:
-        if index in kd_query_indices:
-            kd_query_indices.remove(index)
+    kd_query_indices = [idx for idx in kd_query_indices if idx not in {a_idx, b_idx, c_idx}]
     
     return (len(kd_query_indices) == 0)
 
