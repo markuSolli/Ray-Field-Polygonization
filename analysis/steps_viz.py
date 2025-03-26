@@ -8,7 +8,7 @@ from ray_field import utils
 from ray_field.baseline import Baseline
 from ray_field.prescan_cone import PrescanCone
 from ray_field.candidate_sphere import CandidateSphere
-from ray_field.shrinkwrap import Shrinkwrap
+from ray_field.convex_hull import ConvexHull
 from analysis import ALGORITHM_LIST, OBJECT_NAMES
 from trimesh import Scene
 from numpy import ndarray
@@ -172,68 +172,40 @@ def visalize_candidate_sphere(model_name: str):
     generated_mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
     o3d.visualization.draw_geometries([generated_mesh])
 
-def visualize_shrinkwrap(model_name: str):
-    # Load mesh
-    stanford_mesh = utils.load_and_scale_stanford_mesh(model_name)
-    scene: Scene = trimesh.Scene([stanford_mesh])
-    scene.show()   
-
-    # Generate origins and dirs   
-    model, device = utils.init_model(model_name) 
-    origins, dirs = utils.generate_sphere_rays_tensor(20, device)
-    
-    origins = origins.cpu().detach().numpy()
-    dirs = dirs.cpu().detach().numpy()
-
-    point_cloud = trimesh.points.PointCloud(origins, colors=[0, 0, 255])
-
-    j = 14
-    paths = []
-    for i in range(dirs.shape[2]):
-        paths.append(trimesh.load_path([origins[j], origins[j] + dirs[j,0,i] / 2.0]))
-    scene = trimesh.Scene([stanford_mesh, point_cloud, paths])
-    scene.show()
-
+def visualize_convex_hull(model_name: str):
     # Broad scan
-    origins = torch.from_numpy(origins).to(device)
-    dirs = torch.from_numpy(dirs).to(device)
-    intersections, normals = Shrinkwrap._broad_scan(model, origins, dirs)
-    intersections = intersections.cpu().detach().numpy()
-    normals = normals.cpu().detach().numpy()
-    point_cloud = trimesh.points.PointCloud(intersections, colors=normals / 1.2)
-    scene = trimesh.Scene([point_cloud])
+    model, device = utils.init_model(model_name)
+    origins, dirs = utils.generate_sphere_rays_tensor(N_POINTS, device)
+    intersections, atom_indices = ConvexHull._baseline_scan(model, origins, dirs)
+
+    # Sort intersections by candidate index
+    candidates = []
+    for i in range(16):
+        candidates.append([])
+    
+    for i in range(intersections.shape[0]):
+        candidates[atom_indices[i]].append(intersections[i])
+    
+    # Construct convex hulls for each candidate
+    candidate_clouds = []
+    convex_hulls = []
+    for i in range(16):
+        if (len(candidates[i]) > 3):
+            color = index_to_color(i)
+            cloud = trimesh.points.PointCloud(candidates[i], colors=color)
+            candidate_clouds.append(cloud)
+
+            color.append(255)
+
+            hull = cloud.convex_hull
+            hull.visual.face_colors[:] = np.array(color)
+            convex_hulls.append(hull)
+    
+    scene = trimesh.Scene(candidate_clouds)
     scene.show()
 
-    # Shrinkwrap
-    intersections = torch.from_numpy(intersections).to(device)
-    normals = torch.from_numpy(normals).to(device)
-    origins, dirs = Shrinkwrap._generate_targeted_rays(intersections, normals, device)
-
-    origins = origins.cpu().detach().numpy()
-    dirs = dirs.cpu().detach().numpy()
-
-    point_cloud = trimesh.points.PointCloud(origins, colors=[0, 0, 255])
-
-    j = 14
-    paths = []
-    for i in range(dirs.shape[2]):
-        paths.append(trimesh.load_path([origins[j], origins[j] + dirs[j,0,i] / 2.0]))
-    scene = trimesh.Scene([stanford_mesh, point_cloud, paths])
+    scene = trimesh.Scene(convex_hulls)
     scene.show()
-
-    # Targeted scan
-    origins = torch.from_numpy(origins).to(device)
-    dirs = torch.from_numpy(dirs).to(device)
-    intersections, normals = Shrinkwrap._targeted_scan(model, origins, dirs)
-    intersections = intersections.cpu().detach().numpy()
-    normals = normals.cpu().detach().numpy()
-    point_cloud = trimesh.points.PointCloud(intersections, colors=normals / 1.2)
-    scene = trimesh.Scene([point_cloud])
-    scene.show()
-
-    # Run Poisson Surface Reconstruction
-    generated_mesh = utils.poisson_surface_reconstruction(intersections, normals, 8)
-    o3d.visualization.draw_geometries([generated_mesh])
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-a", "--Algorithm", type=str)
@@ -261,5 +233,5 @@ else:
         visualize_prescan_cone(args.Filename)
     elif args.Algorithm == 'candidate_sphere':
         visalize_candidate_sphere(args.Filename)
-    elif args.Algorithm == 'shrinkwrap':
-        visualize_shrinkwrap(args.Filename)
+    elif args.Algorithm == 'convex_hull':
+        visualize_convex_hull(args.Filename)
