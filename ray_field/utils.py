@@ -243,6 +243,21 @@ def chamfer_distance(a: ndarray, b: ndarray) -> float:
 
     return dist_a.mean() + dist_b.mean()
 
+def chamfer_distance_one_way(a: ndarray, b: ndarray) -> float:
+    """Measure the Chamfer distance from A to B
+
+    Args:
+        a (ndarray): Set A (n, 3)
+        b (ndarray): Set B (m, 3)
+
+    Returns:
+        float: The Chamfer distance
+    """    
+    tree_a: BallTree = BallTree(a)
+    dist_a = tree_a.query(b)[0]
+
+    return dist_a.mean()
+
 def hausdorff_distance(a: ndarray, b: ndarray) -> float:
     """Measures the Hausdorff distance between two sets of points
 
@@ -306,6 +321,14 @@ def chamfer_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh,
     generated_samples = np.asarray(mesh.sample_points_uniformly(samples).points)
 
     return chamfer_distance(stanford_samples, generated_samples)
+
+def chamfer_distance_to_stanford_trimesh(model_name: CheckpointName, mesh: Trimesh, samples: int) -> float:
+    stanford_mesh = load_and_scale_stanford_mesh(model_name)
+
+    stanford_samples = trimesh.sample.sample_surface_even(stanford_mesh, samples)[0]
+    generated_samples = trimesh.sample.sample_surface_even(mesh, samples)[0]
+
+    return chamfer_distance_one_way(stanford_samples, generated_samples)
 
 def hausdorff_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMesh, samples: int) -> float:
     """Measures the Hausdorff distance between the generated mesh and the Stanford mesh.
