@@ -4,7 +4,7 @@ import argparse
 
 from ray_field import CheckpointName
 from ray_field.ball_pivoting import BallPivoting
-from analysis import ALGORITHM_LIST, N_VALUES, OBJECT_NAMES, class_dict
+from analysis import N_VALUES, OBJECT_NAMES
 
 import matplotlib
 import matplotlib.pyplot as plt
