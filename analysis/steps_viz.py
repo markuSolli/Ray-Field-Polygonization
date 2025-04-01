@@ -15,6 +15,24 @@ from numpy import ndarray
 
 N_POINTS = 200
 
+camera_position = np.array([0.0, -4.0, 0.0])
+look_at = np.array([0.0, 0.0, 0.0])
+up_direction = np.array([0.0, 0.0, 1.0])
+
+forward = (look_at - camera_position)
+forward /= np.linalg.norm(forward)
+
+right = np.cross(forward, up_direction)
+right /= np.linalg.norm(right)
+
+up = np.cross(right, forward)
+
+camera_transform = np.eye(4)
+camera_transform[:3, 0] = right
+camera_transform[:3, 1] = up
+camera_transform[:3, 2] = -forward
+camera_transform[:3, 3] = camera_position
+
 def index_to_color(index: int):
     r = (index % 4) * 64
     g = (index % 6) * 43
@@ -59,59 +77,69 @@ def visualize_baseline(model_name: str):
     o3d.visualization.draw_geometries([generated_mesh])
 
 def visualize_prescan_cone(model_name: str):
-    PRESCAN_N = 100
-
     # Load mesh
     stanford_mesh = utils.load_and_scale_stanford_mesh(model_name)
     scene: Scene = trimesh.Scene([stanford_mesh])
-    scene.show()   
-
-    # Broad scan
-    model, device = utils.init_model(model_name)
-    origins, dirs = utils.generate_sphere_rays(PRESCAN_N, device)
-    intersections = PrescanCone._broad_scan(model, origins, dirs).cpu().detach().numpy()
-    intersect_cloud = trimesh.points.PointCloud(intersections, colors=[0, 0, 255])
-    scene = trimesh.Scene([stanford_mesh, intersect_cloud])
+    scene.camera_transform = camera_transform
     scene.show()
 
-    # Generate cone rays
-    sphere_points: ndarray = utils.generate_equidistant_sphere_points(N_POINTS)
-    point_cloud = trimesh.points.PointCloud(sphere_points, colors=[0, 0, 255])
-    intersections = torch.from_numpy(intersections).to(device)
-    origins, dirs = PrescanCone._generate_cone_rays(intersections, N_POINTS, device)
-    origins = origins.cpu().detach().numpy()
-    dirs = dirs.cpu().detach().numpy()
-    j = 0
-    paths = []
-    for i in range(dirs.shape[2]):
-        paths.append(trimesh.load_path([origins[j], origins[j] + dirs[j,0,i] / 2.0]))
-    scene = trimesh.Scene([stanford_mesh, point_cloud, paths])
-    scene.show()
+    with torch.no_grad():
+        # Broad scan
+        model, device = utils.init_model(model_name)
+        origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
+        intersections, intersection_normals = PrescanCone._broad_scan(model, origins, dirs)
+        intersections = intersections.cpu().detach().numpy()
+        intersection_normals = intersection_normals.cpu().detach().numpy()
+        intersect_cloud = trimesh.points.PointCloud(intersections, colors=intersection_normals / 1.2)
+        scene = trimesh.Scene([intersect_cloud])
+        scene.camera_transform = camera_transform
+        scene.show()
 
-    # Targeted scan
-    origins = torch.from_numpy(origins).to(device)
-    dirs = torch.from_numpy(dirs).to(device)
-    intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
-    point_cloud = trimesh.points.PointCloud(intersections, colors=intersection_normals / 1.2)
-    scene = trimesh.Scene([point_cloud])
-    scene.show()
+        # Generate cone rays
+        sphere_points: ndarray = utils.generate_equidistant_sphere_points(N_POINTS)
+        point_cloud = trimesh.points.PointCloud(sphere_points, colors=[0, 0, 255])
+        intersections = torch.from_numpy(intersections).to(device)
+        origins, dirs = PrescanCone._generate_cone_rays(intersections, N_POINTS, device)
+        origins = origins.cpu().detach().numpy()
+        dirs = dirs.cpu().detach().numpy()
+        j = 0
+        paths = []
+        for i in range(dirs.shape[2]):
+            paths.append(trimesh.load_path([origins[j], origins[j] + dirs[j,0,i] / 2.0]))
+        scene = trimesh.Scene([stanford_mesh, point_cloud, paths])
+        scene.camera_transform = camera_transform
+        scene.show()
 
-    # Run Poisson Surface Reconstruction
-    generated_mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, 8)
-    o3d.visualization.draw_geometries([generated_mesh])
+        # Targeted scan
+        origins = torch.from_numpy(origins).to(device)
+        dirs = torch.from_numpy(dirs).to(device)
+        intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+        intersections = intersections.cpu().detach().numpy()
+        intersection_normals = intersection_normals.cpu().detach().numpy()
+        point_cloud = trimesh.points.PointCloud(intersections, colors=intersection_normals / 1.2)
+        scene = trimesh.Scene([point_cloud])
+        scene.camera_transform = camera_transform
+        scene.show()
+
+        # Run Poisson Surface Reconstruction
+        generated_mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, 8)
+        o3d.visualization.draw_geometries([generated_mesh],
+                                            zoom=1.0,
+                                            front=camera_position,
+                                            lookat=look_at,
+                                            up=up)
 
 def visalize_candidate_sphere(model_name: str):
-    PRESCAN_N = 100
-
     # Load mesh
     stanford_mesh = utils.load_and_scale_stanford_mesh(model_name)
     scene: Scene = trimesh.Scene([stanford_mesh])
+    scene.camera_transform = camera_transform
     scene.show()   
 
     # Broad scan
     model, device = utils.init_model(model_name)
-    origins, dirs = utils.generate_sphere_rays(PRESCAN_N, device)
-    intersections = CandidateSphere._broad_scan(model, origins, dirs)
+    origins, dirs = utils.generate_sphere_rays(CandidateSphere.prescan_n, device)
+    intersections, intersection_normals, all_sphere_centers = CandidateSphere._broad_scan(model, origins, dirs)
     intersections = intersections.cpu().detach().numpy()
     colors = np.array([index_to_color(i) for i in range(16)], dtype=np.uint8)
     colors = np.repeat(colors[np.newaxis, :, :], intersections.shape[0], axis=0)
@@ -119,6 +147,7 @@ def visalize_candidate_sphere(model_name: str):
     colors = colors.reshape(-1, 3)
     surface_cloud = trimesh.points.PointCloud(intersections_flat, colors=colors)
     scene = trimesh.Scene([surface_cloud])
+    scene.camera_transform = camera_transform
     scene.show()
 
     # Candidate spheres
@@ -137,6 +166,7 @@ def visalize_candidate_sphere(model_name: str):
         spheres.append(sphere)
 
     scene = trimesh.Scene([surface_cloud, spheres])
+    scene.camera_transform = camera_transform
     scene.show()
 
     # Generate rays
@@ -158,6 +188,7 @@ def visalize_candidate_sphere(model_name: str):
             paths.append(path)
 
     scene = trimesh.Scene([stanford_mesh, point_cloud, paths])
+    scene.camera_transform = camera_transform
     scene.show()
 
     # Targeted scan
@@ -166,11 +197,16 @@ def visalize_candidate_sphere(model_name: str):
     intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
     point_cloud = trimesh.points.PointCloud(intersections, colors=intersection_normals / 1.2)
     scene = trimesh.Scene([point_cloud])
+    scene.camera_transform = camera_transform
     scene.show()
 
     # Poisson Surface Reconstruction
     generated_mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
-    o3d.visualization.draw_geometries([generated_mesh])
+    o3d.visualization.draw_geometries([generated_mesh],
+                                    zoom=1.0,
+                                    front=camera_position,
+                                    lookat=look_at,
+                                    up=up)
 
 def visualize_convex_hull(model_name: str):
     # Broad scan
