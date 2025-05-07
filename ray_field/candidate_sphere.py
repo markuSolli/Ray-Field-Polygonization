@@ -1,3 +1,4 @@
+import gc
 import torch
 import numpy as np
 
@@ -16,12 +17,11 @@ class CandidateSphere(Algorithm):
 
         with torch.no_grad():
             origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-            broad_intersections, broad_normals, sphere_centers = CandidateSphere._broad_scan(model, origins, dirs)
+            all_intersections, all_is_intersecting = CandidateSphere._broad_scan(model, origins, dirs)
 
-            radii, centers = CandidateSphere._generate_candidate_spheres(sphere_centers, device)
-            origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+            radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
+            origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, '16')
             intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
-            intersections, intersection_normals = CandidateSphere._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
         
         return utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
 
@@ -403,23 +403,68 @@ class CandidateSphere(Algorithm):
         torch.cuda.empty_cache()
 
         return distances, R_values
+    
+    @staticmethod
+    def dist_deviation(model_name: CheckpointName, N_values: list[int], samples: int) -> tuple[list[list[float]], list[int]]:
+        model, device = utils.init_model(model_name)
+
+        distances = np.zeros((len(N_values), samples))
+        R_values = np.zeros(len(N_values), dtype=int)
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+                print(N, end='\t')
+
+                origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+                all_intersections, all_is_intersecting = CandidateSphere._broad_scan(model, origins, dirs)
+
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+
+                for j in range(samples):
+                    radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
+                    origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, '16')
+                    intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
+
+                    distances[i][j] = distance
+                    if j == 0:
+                        R_values[i] = R_values[i] + dirs.shape[0] * dirs.shape[2]
+
+                    if ((j + 1) % 6) == 0:
+                        print(f'{distance:.5f}', end='\t')
+
+                    del radii, centers, origins, dirs, intersections, intersection_normals, mesh
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                
+                print()
+                del all_intersections, all_is_intersecting
+                torch.cuda.empty_cache()
+                gc.collect()
+
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        return distances, R_values
 
     @staticmethod
-    def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> torch.Tensor:           
+    def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:           
         result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False, return_all_atoms = True)
 
         all_intersections = result[8]
-        all_normals = result[9]
         all_is_intersecting = result[12]
 
         all_intersections = all_intersections.flatten(end_dim=2)
-        all_normals = all_normals.flatten(end_dim=2)
         all_is_intersecting = all_is_intersecting.flatten(end_dim=2)
 
-        return all_intersections, all_normals, all_is_intersecting
+        return all_intersections, all_is_intersecting
 
     @staticmethod
-    def _generate_candidate_spheres(intersections: torch.Tensor, is_intersecting: torch.Tensor, device: str) -> tuple[torch.Tensor, torch.Tensor]:
+    def _generate_candidate_spheres(intersections: torch.Tensor, is_intersecting: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         is_intersecting = is_intersecting.unsqueeze(-1)
 
         # Find candidate centers
@@ -479,13 +524,14 @@ class CandidateSphere(Algorithm):
 
         # Generate random spherical coordinates within max_angles
         theta = torch.rand(N, 16, M, device=device) * (2 * torch.pi)
-        cos_beta = torch.rand(N, 16, M, device=device) * (1 - torch.cos(max_angles)) + torch.cos(max_angles)
-        sin_beta = torch.sqrt(1 - cos_beta**2)
+        beta = torch.rand(N, 16, M, device=device) * max_angles
+        cos_beta = torch.cos(beta).unsqueeze(-1)
+        sin_beta = torch.sin(beta).unsqueeze(-1)
 
         directions = (
-            cos_beta.unsqueeze(-1) * central_dirs.unsqueeze(2) +
-            sin_beta.unsqueeze(-1) * torch.cos(theta).unsqueeze(-1) * right.unsqueeze(2) +
-            sin_beta.unsqueeze(-1) * torch.sin(theta).unsqueeze(-1) * up.unsqueeze(2)
+            cos_beta * central_dirs.unsqueeze(2) +
+            sin_beta * torch.cos(theta).unsqueeze(-1) * right.unsqueeze(2) +
+            sin_beta * torch.sin(theta).unsqueeze(-1) * up.unsqueeze(2)
         ).reshape(N, 1, -1, 3)
 
         directions = directions / torch.norm(directions, dim=-1, keepdim=True)
@@ -515,14 +561,7 @@ class CandidateSphere(Algorithm):
         is_intersecting = result[4]
 
         is_intersecting = is_intersecting.flatten()
-        intersections = intersections.flatten(end_dim=2)[is_intersecting]
-        intersection_normals = intersection_normals.flatten(end_dim=2)[is_intersecting]
-
-        return intersections, intersection_normals
-
-    @staticmethod
-    def _cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals) -> tuple[ndarray, ndarray]:
-        intersections = torch.cat((intersections, broad_intersections)).cpu().detach().numpy()
-        intersection_normals = torch.cat((intersection_normals, broad_normals)).cpu().detach().numpy()
+        intersections = intersections.flatten(end_dim=2)[is_intersecting].cpu().detach().numpy()
+        intersection_normals = intersection_normals.flatten(end_dim=2)[is_intersecting].cpu().detach().numpy()
 
         return intersections, intersection_normals

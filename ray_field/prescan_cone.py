@@ -1,3 +1,4 @@
+import gc
 import torch
 import numpy as np
 
@@ -386,6 +387,53 @@ class PrescanCone(Algorithm):
         torch.cuda.empty_cache()
         
         return max_angles
+    
+    @staticmethod
+    def dist_deviation(model_name: CheckpointName, N_values: list[int], samples: int) -> tuple[list[list[float]], list[int]]:
+        model, device = utils.init_model(model_name)
+
+        distances = np.zeros((len(N_values), samples))
+        R_values = np.zeros(len(N_values), dtype=int)
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+                print(N, end='\t')
+
+                origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
+                broad_intersections, broad_normals = PrescanCone._broad_scan(model, origins, dirs)
+
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+
+                for j in range(samples):
+                    origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, '256')
+                    intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+                    intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
+            
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
+
+                    distances[i][j] = distance
+                    if j == 0:
+                        R_values[i] = R_values[i] + dirs.shape[0] * dirs.shape[2]
+
+                    if ((j + 1) % 6) == 0:
+                        print(f'{distance:.5f}', end='\t')
+
+                    del origins, dirs, intersections, intersection_normals, mesh
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                
+                print()
+                del broad_intersections, broad_normals
+                torch.cuda.empty_cache()
+                gc.collect()
+
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        return distances, R_values
 
     @staticmethod
     def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> torch.Tensor:
@@ -451,11 +499,12 @@ class PrescanCone(Algorithm):
 
         # Generate random spherical coordinates within max_angles
         theta = torch.rand(N, M, device=device, dtype=torch.float32) * (2 * torch.pi)
-        cos_beta = torch.rand(N, M, device=device, dtype=torch.float32) * (1 - torch.cos(max_angles)) + torch.cos(max_angles)
-        sin_beta = torch.sqrt(1 - cos_beta**2).unsqueeze(-1)
+        beta = torch.rand(N, M, device=device, dtype=torch.float32) * max_angles
+        cos_beta = torch.cos(beta).unsqueeze(-1)
+        sin_beta = torch.sin(beta).unsqueeze(-1)
 
         directions = (
-            cos_beta.unsqueeze(-1) * central_dirs.unsqueeze(1) +
+            cos_beta * central_dirs.unsqueeze(1) +
             sin_beta * torch.cos(theta).unsqueeze(-1) * right.unsqueeze(1) +
             sin_beta * torch.sin(theta).unsqueeze(-1) * up.unsqueeze(1)
         ).unsqueeze(1)

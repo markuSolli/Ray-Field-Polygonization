@@ -454,9 +454,8 @@ def get_max_cone_angles(origins: torch.Tensor, points: torch.Tensor) -> torch.Te
 
     dot_products = torch.sum(vecs_to_points * cam_forward_exp, dim=2)
     vec_norms = torch.norm(vecs_to_points, dim=2)
-    cam_norms = torch.norm(cam_forwards, dim=1, keepdim=True)
 
-    cos_theta = dot_products / (vec_norms * cam_norms)
+    cos_theta = dot_products / vec_norms
     cos_theta = torch.clamp(cos_theta, -1.0, 1.0)
 
     angles = torch.acos(cos_theta)
