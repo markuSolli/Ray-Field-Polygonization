@@ -303,6 +303,41 @@ class BaselineDevice(Algorithm):
         torch.cuda.empty_cache()
 
         return distances, R_values
+    
+    def optimize(model_name: CheckpointName, N_values: list[int], D_values: list[int]) -> tuple[list[list[float]], list[int]]:
+        model, device = utils.init_model(model_name)
+
+        distances = np.zeros((len(D_values), len(N_values)))
+        R_values = np.zeros(len(N_values), dtype=int)
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+
+                origins, dirs = utils.generate_sphere_rays(N, device)
+                intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+
+                for j in range(len(D_values)):
+                    D = D_values[j]
+                    print(f'N: {N}\tD: {D}', end='\t')
+            
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, D)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, BaselineDevice.dist_samples)
+
+                    distances[j][i] = distance
+                    print(f'{distance:.6f}')
+
+                    del mesh
+                    torch.cuda.empty_cache()
+                
+                del origins, dirs, intersections, intersection_normals
+                torch.cuda.empty_cache()
+        
+        del model
+        torch.cuda.empty_cache()
+
+        return distances, R_values
 
     @staticmethod
     def _baseline_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:

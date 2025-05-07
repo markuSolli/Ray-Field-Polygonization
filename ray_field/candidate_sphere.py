@@ -9,7 +9,7 @@ from timeit import default_timer as timer
 from numpy import ndarray
 
 class CandidateSphere(Algorithm):
-    prescan_n: int = 16
+    prescan_n: int = 32
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
         model, device = utils.init_model(model_name)
@@ -405,56 +405,32 @@ class CandidateSphere(Algorithm):
         return distances, R_values
 
     @staticmethod
-    def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> torch.Tensor:       
-        """Perform a ray query on the MARF model to get all candidate intersections.
-
-        Args:
-            model (IntersectionFieldAutoDecoderModel): Initialized MARF model
-            origins (torch.Tensor): Origins of the rays (n, 3)
-            dirs (torch.Tensor): Ray directions (n, 1, n-1, 3)
-
-        Returns:
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-                - Intersection points (m, 3)
-                - Intersection normals (m, 3)
-                - Sphere centers (m, 16, 3)
-        """        
+    def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> torch.Tensor:           
         result = model.forward(dict(origins=origins, dirs=dirs), intersections_only = False, return_all_atoms = True)
 
-        intersections = result[2]
-        intersection_normals = result[3]
-        is_intersecting = result[4]
-        all_sphere_centers = result[13]
+        all_intersections = result[8]
+        all_normals = result[9]
+        all_is_intersecting = result[12]
 
-        is_intersecting = is_intersecting.flatten()
-        intersections = intersections.flatten(end_dim=2)[is_intersecting]
-        intersection_normals = intersection_normals.flatten(end_dim=2)[is_intersecting]
-        all_sphere_centers = all_sphere_centers.flatten(end_dim=2)
+        all_intersections = all_intersections.flatten(end_dim=2)
+        all_normals = all_normals.flatten(end_dim=2)
+        all_is_intersecting = all_is_intersecting.flatten(end_dim=2)
 
-        return intersections, intersection_normals, all_sphere_centers
+        return all_intersections, all_normals, all_is_intersecting
 
     @staticmethod
-    def _generate_candidate_spheres(sphere_centers: torch.Tensor, device: str) -> tuple[torch.Tensor, torch.Tensor]:
-        """Find spheres containing the intersections for each candidate.
-        The sphere center is the mean position of the intersections.
-        The sphere radius is the distance from the candidate's centroid and it's furthest point.
-
-        Args:
-            sphere_centers (torch.Tensor): Sphere centers from the broad scan (x, 16, 3)
-            device (str): The device to store tensors in
-
-        Returns:
-            tuple[torch.Tensor, torch.Tensor]
-                - Sphere radii (16)
-                - Sphere centers (16, 3)
-        """        
-        max_radii = torch.zeros(16, dtype=torch.float32, device=device)
+    def _generate_candidate_spheres(intersections: torch.Tensor, is_intersecting: torch.Tensor, device: str) -> tuple[torch.Tensor, torch.Tensor]:
+        is_intersecting = is_intersecting.unsqueeze(-1)
 
         # Find candidate centers
-        candidate_centers = sphere_centers.mean(dim=0)
+        intersection_sums = torch.sum(intersections * is_intersecting, dim=0)
+        valid_count = torch.sum(is_intersecting, dim=0).clamp(min=1)
+        candidate_centers = intersection_sums / valid_count
 
         # Find candidate radii
-        distances = torch.norm(sphere_centers - candidate_centers, dim=2)
+        is_intersecting = is_intersecting.squeeze()
+        distances = torch.norm(intersections - candidate_centers, dim=2)
+        distances[~is_intersecting] = 0
         max_radii = distances.max(dim=0).values
 
         return max_radii, candidate_centers
