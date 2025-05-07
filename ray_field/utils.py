@@ -203,9 +203,9 @@ def poisson_surface_reconstruction(points: ndarray, normals: ndarray, depth: int
     with o3d.utility.VerbosityContextManager(verbosity) as cm:
         mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(point_cloud, depth=depth)[0]
 
-    # Fix normals and assign color
-    mesh.compute_vertex_normals()
-    mesh.paint_uniform_color(np.array([[0.5],[0.5],[0.5]]))
+    # Fix normals and assign color (omg WHY HERE???)
+    #mesh.compute_vertex_normals()
+    #mesh.paint_uniform_color(np.array([[0.5],[0.5],[0.5]]))
 
     return mesh
 

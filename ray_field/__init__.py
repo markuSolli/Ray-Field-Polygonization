@@ -12,13 +12,13 @@ LUCY = f'{TENSORBOARD}lucy-both2marf-16atom-50xinscr-10dmiss-geom-25cnrml-8x512f
 
 model_dict = {
     'bunny': BUNNY,
-    'happy_buddha': BUDDHA,
+    'buddha': BUDDHA,
     'armadillo': ARMADILLO,
     'dragon': DRAGON,
     'lucy': LUCY
 }
 
-CheckpointName: TypeAlias = Literal['bunny', 'happy_buddha', 'armadillo', 'dragon', 'lucy']
+CheckpointName: TypeAlias = Literal['bunny', 'buddha', 'armadillo', 'dragon', 'lucy']
 
 def get_checkpoint(name: CheckpointName) -> str:
     return model_dict[name]

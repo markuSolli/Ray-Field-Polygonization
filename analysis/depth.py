@@ -1,10 +1,11 @@
 import os
 import csv
 import argparse
+import numpy as np
 
 from ray_field import CheckpointName
 from ray_field.baseline_device import BaselineDevice
-from old_analysis import N_VALUES, OBJECT_NAMES
+from analysis import N_VALUES, OBJECT_NAMES, model_name_dict
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -15,7 +16,7 @@ DIR_PATH = 'analysis/data/depth/'
 def compute_values(model_name: CheckpointName) -> tuple[list[int], list[int], list[list[float]]]:
     D_values = list(range(6, 11, 1))
     
-    distances, R_values = BaselineDevice.optimize(model_name, N_VALUES, D_values)
+    distances, R_values = BaselineDevice.depth(model_name, N_VALUES, D_values)
 
     return D_values, R_values, distances
 
@@ -45,15 +46,16 @@ def load_results(model_name: str) -> tuple[list[int], list[int], list[list[float
 
 def plot_results(D_values: list[int], R_values: list[int], distances: list[list[float]], model_name: str) -> None:
     fig, ax = plt.subplots()
+    distances = np.array(distances) * 100
 
     for i, entry in enumerate(distances):
         ax.plot(R_values, entry, label=f'{D_values[i]}')
     
-    ax.set_ylabel('Chamfer Distance')
+    ax.set_ylabel('CD$\\cdot10^2$')
     ax.set_xlim([0, 150000])
-    ax.set_ylim([0.012, 0.036])
+    ax.set_ylim([1.2, 3.6])
     ax.set_xlabel('|R|')
-    ax.set_title(f'{model_name.capitalize()}')
+    ax.set_title(f'{model_name_dict[model_name]}')
     ax.legend(loc=(1.04, 0), title='Depth')
     plt.grid(linestyle='dotted', color='grey')
     fig.savefig(f'{DIR_PATH}{model_name}.png', bbox_inches="tight")

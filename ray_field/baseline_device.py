@@ -1,3 +1,4 @@
+import gc
 import torch
 import numpy as np
 
@@ -304,7 +305,8 @@ class BaselineDevice(Algorithm):
 
         return distances, R_values
     
-    def optimize(model_name: CheckpointName, N_values: list[int], D_values: list[int]) -> tuple[list[list[float]], list[int]]:
+    @staticmethod
+    def depth(model_name: CheckpointName, N_values: list[int], D_values: list[int]) -> tuple[list[list[float]], list[int]]:
         model, device = utils.init_model(model_name)
 
         distances = np.zeros((len(D_values), len(N_values)))
@@ -338,6 +340,51 @@ class BaselineDevice(Algorithm):
         torch.cuda.empty_cache()
 
         return distances, R_values
+    
+    @staticmethod
+    def time_deviation(model_name: CheckpointName, N_values: list[int], samples: int) -> tuple[list[list[float]], list[int]]:
+        model, device = utils.init_model(model_name)
+
+        times = np.zeros((len(N_values), samples))
+        R_values = np.zeros(len(N_values), dtype=int)
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+                print(N, end='\t')
+
+                for j in range(samples):
+                    torch.cuda.synchronize(device)
+                    start_time = timer()
+
+                    origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                    intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+
+                    torch.cuda.synchronize(device)
+                    time = timer() - start_time
+
+                    if j == 0:
+                        R_values[i] = dirs.shape[0] * dirs.shape[2]
+
+                    times[i][j] = time
+
+                    if ((j + 1) % 6) == 0:
+                        print(f'{time:.5f}', end='\t')
+
+                    del origins, dirs, intersections, intersection_normals, mesh
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                
+                print()
+                torch.cuda.empty_cache()
+                gc.collect()
+
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        return times, R_values
 
     @staticmethod
     def _baseline_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[ndarray, ndarray]:
