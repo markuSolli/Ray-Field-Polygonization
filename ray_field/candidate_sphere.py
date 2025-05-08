@@ -370,47 +370,47 @@ class CandidateSphere(Algorithm):
 
         return distances, R_values
     
-    def optimize_ray(model_name: CheckpointName, N_values: list[int], M_values: list[str]) -> tuple[list[list[float]], list[list[int]]]:
+    def optimize_ray(model_name: CheckpointName, N_values: list[list[int]], M_values: list[str]) -> tuple[list[list[float]], list[list[int]]]:   
         model, device = utils.init_model(model_name)
 
-        distances = np.zeros((len(M_values), len(N_values)))
-        R_values = np.zeros((len(M_values), len(N_values)), dtype=int)
+        distances = np.zeros((len(M_values), len(N_values[0])))
+        R_values = np.zeros((len(M_values), len(N_values[0])), dtype=int)
+
+        origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
+        all_intersections, all_is_intersecting = CandidateSphere._broad_scan(model, origins, dirs)
+        radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
+
+        R_values.fill(dirs.shape[0] * dirs.shape[2])
 
         with torch.no_grad():
-            origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-            broad_intersections, broad_normals, sphere_centers = CandidateSphere._broad_scan(model, origins, dirs)
-            radii, centers = CandidateSphere._generate_candidate_spheres(sphere_centers, device)
-
-            del sphere_centers
-            torch.cuda.empty_cache()
-
-            R_values.fill(dirs.shape[0] * dirs.shape[2])
-            
             for i in range(len(M_values)):
                 M = M_values[i]
 
-                for j in range(len(N_values)):
-                    N = N_values[j]
+                for j in range(len(N_values[i])):
+                    N = N_values[i][j]
+                    print(f'M: {M}\tN: {N}', end='\t')
 
                     origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, M)
                     intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
-                    intersections, intersection_normals = CandidateSphere._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
-                
+            
                     mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
                     distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
 
                     distances[i][j] = distance
                     R_values[i][j] = R_values[i][j] + dirs.shape[0] * dirs.shape[2]
-
-                    print(f'M: {M}\tN: {N}\t{distance:.6f}')
+                    
+                    print(f'{distance:.6f}')
 
                     del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
+                    gc.collect()
                 
                 torch.cuda.empty_cache()
+                gc.collect()
         
-        del model
+        del all_intersections, all_is_intersecting, radii, centers, model
         torch.cuda.empty_cache()
+        gc.collect()
 
         return distances, R_values
     
@@ -491,7 +491,7 @@ class CandidateSphere(Algorithm):
         return max_radii, candidate_centers
 
     @staticmethod
-    def _generate_candidate_rays(radii: torch.Tensor, centers: torch.Tensor, N: int, device: str, m_type: str = 'distributed') -> tuple[torch.Tensor, torch.Tensor]:
+    def _generate_candidate_rays(radii: torch.Tensor, centers: torch.Tensor, N: int, device: str, m_type: str) -> tuple[torch.Tensor, torch.Tensor]:
         """Generates n origins along the unit sphere. For each candidate sphere,
         M rays are generated in a cone that covers that sphere. The value of M is calculated through the chosen approach.
 
@@ -510,10 +510,8 @@ class CandidateSphere(Algorithm):
         origins = utils.generate_equidistant_sphere_points_tensor(N, device)
         N = origins.shape[0]
 
-        if m_type == 'distributed':
-            M = (N - 1) // 16
-        elif m_type == 'linear':
-            M = N - 1
+        if m_type == 'n/16':
+            M = N // 16
         else:
             M = int(m_type)
 

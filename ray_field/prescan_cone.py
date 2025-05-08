@@ -11,6 +11,7 @@ from numpy import ndarray
 
 class PrescanCone(Algorithm):
     prescan_n: int = 32
+    targeted_m: str = '128'
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
         model, device = utils.init_model(model_name)
@@ -19,7 +20,7 @@ class PrescanCone(Algorithm):
             origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
             broad_intersections, broad_normals = PrescanCone._broad_scan(model, origins, dirs)
 
-            origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device)
+            origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
             intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
             intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
         
@@ -40,7 +41,7 @@ class PrescanCone(Algorithm):
             for N in N_values:
                 print(N, end='\t')
 
-                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device)
+                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
                 intersections, _ = PrescanCone._targeted_scan(model, origins, dirs)
 
                 sphere_n = origins.shape[0]
@@ -73,7 +74,7 @@ class PrescanCone(Algorithm):
                 N = N_values[i]
                 print(N, end='\t')
 
-                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, '256')
+                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
                 intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
                 intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
 
@@ -109,7 +110,7 @@ class PrescanCone(Algorithm):
                 N = N_values[i]
                 print(N, end='\t')
 
-                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, '256')
+                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
                 intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
                 intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
 
@@ -150,7 +151,7 @@ class PrescanCone(Algorithm):
                     if j == 0:
                         R_values[i] = dirs.shape[0] * dirs.shape[2]
 
-                    origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, '256')
+                    origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
                     intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
                     intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
 
@@ -209,7 +210,7 @@ class PrescanCone(Algorithm):
                     torch.cuda.synchronize()
                     broad_end = timer()
 
-                    origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device)
+                    origins, dirs = PrescanCone._generate_cone_rays(intersections, N, device, PrescanCone.targeted_m)
                     intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
 
                     torch.cuda.synchronize()
@@ -256,7 +257,7 @@ class PrescanCone(Algorithm):
 
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
 
-                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, '256')
+                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
                 intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
                 intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
 
@@ -300,7 +301,7 @@ class PrescanCone(Algorithm):
 
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
 
-                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, '256')
+                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
                 intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
                 intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
 
@@ -343,7 +344,7 @@ class PrescanCone(Algorithm):
                     N = N_values[j]
                     print(f'M: {M}\tN: {N}', end='\t')
 
-                    origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, '256')
+                    origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
                     intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
                     intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
             
@@ -369,11 +370,11 @@ class PrescanCone(Algorithm):
 
         return distances, R_values
     
-    def optimize_ray(model_name: CheckpointName, N_values: list[int], M_values: list[str]) -> tuple[list[list[float]], list[list[int]]]:   
+    def optimize_ray(model_name: CheckpointName, N_values: list[list[int]], M_values: list[str]) -> tuple[list[list[float]], list[list[int]]]:   
         model, device = utils.init_model(model_name)
 
-        distances = np.zeros((len(M_values), len(N_values)))
-        R_values = np.zeros((len(M_values), len(N_values)), dtype=int)
+        distances = np.zeros((len(M_values), len(N_values[0])))
+        R_values = np.zeros((len(M_values), len(N_values[0])), dtype=int)
 
         origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
         broad_intersections, broad_normals = PrescanCone._broad_scan(model, origins, dirs)
@@ -384,8 +385,8 @@ class PrescanCone(Algorithm):
             for i in range(len(M_values)):
                 M = M_values[i]
 
-                for j in range(len(N_values)):
-                    N = N_values[j]
+                for j in range(len(N_values[i])):
+                    N = N_values[i][j]
                     print(f'M: {M}\tN: {N}', end='\t')
 
                     origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, M)
@@ -516,7 +517,7 @@ class PrescanCone(Algorithm):
         return intersections, intersection_normals
 
     @staticmethod
-    def _generate_cone_rays(intersections: torch.Tensor, N: int, device: str, m_type: str = 'linear') -> tuple[torch.Tensor, torch.Tensor]:
+    def _generate_cone_rays(intersections: torch.Tensor, N: int, device: str, m_type: str) -> tuple[torch.Tensor, torch.Tensor]:
         """Generates n origins along the unit sphere, finds the maximum angle for each origin
         to cover the intersection points, and generates m random rays within that angle
 
@@ -537,8 +538,8 @@ class PrescanCone(Algorithm):
 
         N = origins.shape[0]
 
-        if m_type == 'linear':
-            M = N - 1
+        if m_type == 'n':
+            M = N
         else:
             M = int(m_type)
 

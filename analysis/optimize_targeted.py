@@ -14,8 +14,14 @@ matplotlib.use('Agg')
 DIR_PATH = 'analysis/data/optimize_targeted/'
 
 def compute_values(model_name: CheckpointName, algorithm: type[Algorithm]) -> tuple[list[str], list[list[int]], list[list[float]]]:
-    N_values = list(range(50, 601, 50))
-    M_values = list('128', '256', '384', 'linear')
+    N_values = [
+        np.linspace(50, 2500, 10, dtype=int),
+        np.linspace(50, 1500, 10, dtype=int),
+        np.linspace(50, 1000, 10, dtype=int),
+        np.linspace(50, 500, 10, dtype=int),
+        np.linspace(50, 500, 10, dtype=int)
+        ]
+    M_values = ['4', '8', '16', '32', 'n/16']
     
     distances, R_values = algorithm.optimize_ray(model_name, N_values, M_values)
 
@@ -54,7 +60,7 @@ def plot_results(M_values: list[str], R_values: list[list[int]], distances: list
     distances = np.array(distances) * 100
 
     for m, r, dist in zip(M_values, R_values, distances):
-        ax.plot(r, dist, label=f'{m}')
+        ax.plot(r, dist, label=f'${m}$')
     
     ax.set_ylabel('CD$\\cdot10^2$')
     #ax.set_xlim([0, 150000])
