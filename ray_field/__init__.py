@@ -12,7 +12,7 @@ LUCY = f'{TENSORBOARD}lucy-both2marf-16atom-50xinscr-10dmiss-geom-25cnrml-8x512f
 
 model_dict = {
     'bunny': BUNNY,
-    'buddha': BUDDHA,
+    'happy_buddha': BUDDHA,
     'armadillo': ARMADILLO,
     'dragon': DRAGON,
     'lucy': LUCY

@@ -12,9 +12,6 @@ MODEL_NAME = 'bunny'
 DIR_PATH = 'analysis/data/dist_deviation/'
 
 def compute_values(algorithm: type[Algorithm]) -> tuple[list[int], list[list[float]]]:
-    # Warm up
-    algorithm.surface_reconstruction(MODEL_NAME, 100)
-
     distances, R_values = algorithm.dist_deviation(MODEL_NAME, N_VALUES, SAMPLES)
 
     return R_values, distances

@@ -11,6 +11,13 @@ OBJECT_NAMES = ['armadillo', 'bunny', 'buddha', 'dragon'] # Runs out of memory w
 N_VALUES = list(range(50, 401, 50))
 TIME_SAMPLES = 50
 
+model_checkpoint_dict = {
+    'armadillo': 'armadillo',
+    'bunny': 'bunny',
+    'dragon': 'dragon',
+    'buddha': 'happy_buddha'
+}
+
 class_dict = {
     'baseline': Baseline,
     'baseline_device': BaselineDevice,

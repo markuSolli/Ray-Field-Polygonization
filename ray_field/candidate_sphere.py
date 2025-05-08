@@ -326,39 +326,49 @@ class CandidateSphere(Algorithm):
 
         return times, distances, R_values
     
-    def optimize(model_name: CheckpointName, N_values: list[int], M_values: list[int]) -> list[list[float]]:
+    def optimize(model_name: CheckpointName, N_values: list[int], M_values: list[int]) -> tuple[list[list[float]], list[list[int]]]:   
         model, device = utils.init_model(model_name)
 
-        distances = []
+        distances = np.zeros((len(M_values), len(N_values)))
+        R_values = np.zeros((len(M_values), len(N_values)), dtype=int)
 
         with torch.no_grad():
-            for M in M_values:
-                origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-                broad_intersections, broad_normals, sphere_centers = CandidateSphere._broad_scan(model, origins, dirs)
-                prescan_distances = []
+            for i in range(len(M_values)):
+                M = M_values[i]
+                origins, dirs = utils.generate_sphere_rays_tensor(M, device)
+                all_intersections, all_is_intersecting = CandidateSphere._broad_scan(model, origins, dirs)
+                radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
 
-                for N in N_values:
+                R_values[i].fill(dirs.shape[0] * dirs.shape[2])
+
+                for j in range(len(N_values)):
+                    N = N_values[j]
                     print(f'M: {M}\tN: {N}', end='\t')
 
-                    radii, centers = CandidateSphere._generate_candidate_spheres(sphere_centers, device)
-                    origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device)
+                    origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, '16')
                     intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
-                    intersections, intersection_normals = CandidateSphere._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
             
                     mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
                     distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
 
-                    prescan_distances.append(distance)
+                    distances[i][j] = distance
+                    R_values[i][j] = R_values[i][j] + dirs.shape[0] * dirs.shape[2]
+                    
                     print(f'{distance:.6f}')
+
+                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
+                    gc.collect()
                 
-                distances.append(prescan_distances)
+                del all_intersections, all_is_intersecting, radii, centers
                 torch.cuda.empty_cache()
+                gc.collect()
         
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
-        return distances
+        return distances, R_values
     
     def optimize_ray(model_name: CheckpointName, N_values: list[int], M_values: list[str]) -> tuple[list[list[float]], list[list[int]]]:
         model, device = utils.init_model(model_name)
@@ -418,11 +428,11 @@ class CandidateSphere(Algorithm):
 
                 origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
                 all_intersections, all_is_intersecting = CandidateSphere._broad_scan(model, origins, dirs)
+                radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
 
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                 for j in range(samples):
-                    radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
                     origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, '16')
                     intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
 
@@ -436,12 +446,12 @@ class CandidateSphere(Algorithm):
                     if ((j + 1) % 6) == 0:
                         print(f'{distance:.5f}', end='\t')
 
-                    del radii, centers, origins, dirs, intersections, intersection_normals, mesh
+                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
                     gc.collect()
                 
                 print()
-                del all_intersections, all_is_intersecting
+                del all_intersections, all_is_intersecting, radii, centers
                 torch.cuda.empty_cache()
                 gc.collect()
 
@@ -503,7 +513,7 @@ class CandidateSphere(Algorithm):
         if m_type == 'distributed':
             M = (N - 1) // 16
         elif m_type == 'linear':
-            M = N
+            M = N - 1
         else:
             M = int(m_type)
 
