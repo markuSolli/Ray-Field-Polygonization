@@ -8,8 +8,7 @@ from ray_field.angle_filter import AngleFilter
 
 ALGORITHM_LIST = ['baseline', 'baseline_device', 'prescan_cone', 'candidate_sphere', 'ball_pivoting', 'convex_hull', 'angle_filter']
 OBJECT_NAMES = ['armadillo', 'bunny', 'buddha', 'dragon'] # Runs out of memory when measuring Chamfer distance with 'lucy'
-N_VALUES = list(range(50, 401, 50))
-TIME_SAMPLES = 50
+N_VALUES = list(range(50, 501, 50))
 
 model_checkpoint_dict = {
     'armadillo': 'armadillo',

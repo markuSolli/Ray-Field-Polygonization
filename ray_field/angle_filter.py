@@ -1,3 +1,4 @@
+import gc
 import torch
 import numpy as np
 
@@ -247,19 +248,18 @@ class AngleFilter(Algorithm):
     def optimize(model_name: CheckpointName, N_values: list[int], M_values: ndarray) -> tuple[ndarray, ndarray]:
         model, device = utils.init_model(model_name)
 
-        distances = np.zeros((len(N_values), len(M_values)))
-        R_values = np.zeros((len(N_values), len(M_values)), dtype=int)
+        distances = np.zeros((len(M_values), len(N_values)))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             for i in range(len(N_values)):
                 N = N_values[i]
 
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+
                 for j in range(len(M_values)):
                     M = M_values[j]
-                    
-                    origins, dirs = utils.generate_sphere_rays_tensor(N, device)
-
-                    R_values[i][j] = dirs.shape[0] * dirs.shape[2]
 
                     intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
                     intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, M)
@@ -267,25 +267,29 @@ class AngleFilter(Algorithm):
                     mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
                     distance = utils.chamfer_distance_to_stanford(model_name, mesh, AngleFilter.dist_samples)
 
-                    distances[i][j] = distance
+                    distances[j][i] = distance
                     print(f'N: {N}\tM: {M:.1f}\t{distance:.6f}')
 
-                    del origins, dirs, intersections, intersection_normals, is_intersecting, mesh
+                    del intersections, intersection_normals, is_intersecting, mesh
                     torch.cuda.empty_cache()
+                    gc.collect()
                 
+                del origins, dirs
                 torch.cuda.empty_cache()
+                gc.collect()
         
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
-        return distances.T, R_values.T
+        return distances, R_values
     
     @staticmethod
     def optimize_time(model_name: CheckpointName, N_values: list[int], M_values: ndarray) -> tuple[ndarray, ndarray]:
         model, device = utils.init_model(model_name)
 
-        times = np.zeros((len(N_values), len(M_values)))
-        R_values = np.zeros((len(N_values), len(M_values)), dtype=int)
+        times = np.zeros((len(M_values), len(N_values)))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             for i in range(len(N_values)):
@@ -293,44 +297,45 @@ class AngleFilter(Algorithm):
 
                 for j in range(len(M_values)):
                     M = M_values[j]
-                    print(f'N: {N}\tM{M:.1f}', end='\t')
+                    print(f'N: {N}\tM: {M}')
+
+                    local_times = np.zeros(AngleFilter.time_samples)
 
                     for k in range(AngleFilter.time_samples):
-                        torch.cuda.synchronize(device)
+                        torch.cuda.synchronize()
                         start_time = timer()
-                        
+
                         origins, dirs = utils.generate_sphere_rays_tensor(N, device)
 
-                        if (k == 0):
-                            R_values[i][j] = dirs.shape[0] * dirs.shape[2]
+                        if (j == 0 and k == 0):
+                            R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                         intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
                         intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, M)
 
                         mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
 
-                        torch.cuda.synchronize(device)
+                        torch.cuda.synchronize()
                         time = timer() - start_time
 
-                        times[i][j] = times[i][j] + time
-                        print(f'{time:.6f}', end='\t')
+                        local_times[k] = time
 
                         del origins, dirs, intersections, intersection_normals, is_intersecting, mesh
                         torch.cuda.empty_cache()
-                
+                        gc.collect()
+                    
+                    times[j][i] = np.mean(local_times)
                     torch.cuda.empty_cache()
-                    print()
+                    gc.collect()
                 
                 torch.cuda.empty_cache()
-            
-            torch.cuda.empty_cache()
+                gc.collect()
         
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
-        times = times / AngleFilter.time_samples
-
-        return times.T, R_values.T
+        return times, R_values
 
     @staticmethod
     def _baseline_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:     
