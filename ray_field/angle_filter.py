@@ -10,6 +10,7 @@ from timeit import default_timer as timer
 from numpy import ndarray
 
 class AngleFilter(Algorithm):
+    cosine_limit: float = 0.4
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
         model, device = utils.init_model(model_name)
@@ -17,7 +18,7 @@ class AngleFilter(Algorithm):
 
         with torch.no_grad():
             intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
-            intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting)
+            intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, AngleFilter.cosine_limit)
 
         return utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
 
@@ -40,7 +41,7 @@ class AngleFilter(Algorithm):
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                 intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
-                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting)
+                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, AngleFilter.cosine_limit)
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
                 distance = utils.chamfer_distance_to_stanford(model_name, mesh, AngleFilter.dist_samples)
 
@@ -70,7 +71,7 @@ class AngleFilter(Algorithm):
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                 intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
-                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting)
+                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, AngleFilter.cosine_limit)
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
                 distance = utils.hausdorff_distance_to_stanford(model_name, mesh, AngleFilter.dist_samples)
 
@@ -105,7 +106,7 @@ class AngleFilter(Algorithm):
                         R_values[i] = dirs.shape[0] * dirs.shape[2]
                     
                     intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
-                    intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting)
+                    intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, AngleFilter.cosine_limit)
                     mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
 
                     torch.cuda.synchronize(device)
@@ -149,7 +150,7 @@ class AngleFilter(Algorithm):
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                 intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
-                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting)
+                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, AngleFilter.cosine_limit)
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
 
                 torch.cuda.synchronize()
@@ -189,7 +190,7 @@ class AngleFilter(Algorithm):
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                 intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
-                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting)
+                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, AngleFilter.cosine_limit)
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
 
                 torch.cuda.synchronize()
@@ -229,7 +230,7 @@ class AngleFilter(Algorithm):
                 R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                 intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
-                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting)
+                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, AngleFilter.cosine_limit)
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
                 distance = utils.chamfer_distance_to_marf_2(intersections, mesh)
 
@@ -348,7 +349,7 @@ class AngleFilter(Algorithm):
         return intersections, intersection_normals, is_intersecting
 
     @staticmethod
-    def _filter(dirs: torch.Tensor, intersections: torch.Tensor, intersection_normals: torch.Tensor, is_intersecting: torch.Tensor, limit: float = -0.707) -> tuple[ndarray, ndarray]:     
+    def _filter(dirs: torch.Tensor, intersections: torch.Tensor, intersection_normals: torch.Tensor, is_intersecting: torch.Tensor, limit: float) -> tuple[ndarray, ndarray]:     
         dirs = dirs.squeeze()
         cosine = torch.sum(dirs * intersection_normals, dim=-1)
         mask = (cosine < limit) & is_intersecting
