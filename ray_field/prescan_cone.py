@@ -58,8 +58,9 @@ class PrescanCone(Algorithm):
         
         return hit_rates
 
-    def chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+    def chamfer(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 1900, length, dtype=int)
 
         distances = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)
@@ -84,13 +85,19 @@ class PrescanCone(Algorithm):
                 distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
 
                 distances[i] = distance
-                print(f'{distance:.6f}')
+                print(f'{distance:.5f}')
 
                 del origins, dirs, intersections, intersection_normals, mesh
                 torch.cuda.empty_cache()
+                gc.collect()
+            
+            del broad_intersections, broad_normals
+            torch.cuda.empty_cache()
+            gc.collect()
         
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
         return distances, R_values
     
@@ -130,11 +137,12 @@ class PrescanCone(Algorithm):
 
         return distances, R_values
 
-    def time(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+    def time(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 1900, length, dtype=int)
 
         times = np.zeros(len(N_values))
-        R_values = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             for i in range(len(N_values)):
@@ -142,7 +150,7 @@ class PrescanCone(Algorithm):
                 print(N, end='\t')
 
                 for j in range(PrescanCone.time_samples):
-                    torch.cuda.synchronize()
+                    torch.cuda.synchronize(device)
                     start_time = timer()
 
                     origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
@@ -157,23 +165,28 @@ class PrescanCone(Algorithm):
 
                     mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
 
-                    torch.cuda.synchronize()
+                    torch.cuda.synchronize(device)
                     time = timer() - start_time
 
                     if j == 0:
-                        R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
+                        R_values[i] = R_values[i] + dirs.shape[0] * dirs.shape[2]
 
                     times[i] = times[i] + time
-                    print(f'{time:.5f}', end='\t')
+                    
+                    if ((j + 1) % 6) == 0:
+                        print(f'{time:.5f}', end='\t')
 
                     del origins, dirs, broad_intersections, broad_normals, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
+                    gc.collect()
                 
                 print()
                 torch.cuda.empty_cache()
-        
+                gc.collect()
+
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
         times = times / PrescanCone.time_samples
 

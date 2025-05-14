@@ -25,8 +25,9 @@ class AngleFilter(Algorithm):
     def hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[float]:
         pass
 
-    def chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+    def chamfer(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 500, length, dtype=int)
 
         distances = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)
@@ -85,8 +86,9 @@ class AngleFilter(Algorithm):
 
         return distances, R_values
 
-    def time(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+    def time(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 500, length, dtype=int)
 
         times = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)
@@ -113,16 +115,21 @@ class AngleFilter(Algorithm):
                     time = timer() - start_time
 
                     times[i] = times[i] + time
-                    print(f'{time:.5f}', end='\t')
+                    
+                    if ((j + 1) % 6) == 0:
+                        print(f'{time:.5f}', end='\t')
 
                     del origins, dirs, intersections, intersection_normals, is_intersecting, mesh
                     torch.cuda.empty_cache()
+                    gc.collect()
                 
                 print()
                 torch.cuda.empty_cache()
+                gc.collect()
 
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
         times = times / AngleFilter.time_samples
 
