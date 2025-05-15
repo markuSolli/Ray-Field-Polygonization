@@ -148,28 +148,20 @@ class BaselineDevice(Algorithm):
 
         return times, R_values
 
-    def time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
-        """Measure execution time of the surface reconstruction divided in
-            - Ray generation
-            - MARF query
-            - Surface reconstruction
-
-        Args:
-            model_name (CheckpointName): Valid model name
-            N_values (list[int]): N-values to test
-
-        Returns:
-            list[list[float]]: (N, 3) execution times
-        """
+    def time_steps(model_name: CheckpointName, length: int) -> tuple[list[str], list[list[float]], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 500, length, dtype=int)
+        steps = ['Ray Generation', 'MARF Query', 'PSR']
 
-        times = np.zeros((len(N_values), 3))
+        times = np.zeros((len(steps), len(N_values)))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             for i in range(len(N_values)):
                 N = N_values[i]
+                print(N, end='\t')
 
-                for _ in range(BaselineDevice.time_samples):
+                for j in range(BaselineDevice.time_samples):
                     torch.cuda.synchronize(device)
                     ray_start = timer()
 
@@ -181,31 +173,38 @@ class BaselineDevice(Algorithm):
                     intersections, intersection_normals = BaselineDevice._baseline_scan(model, origins, dirs)
 
                     torch.cuda.synchronize(device)
-                    scan_end = timer()
+                    query_end = timer()
 
-                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, BaselineDevice.poisson_depth)
 
                     torch.cuda.synchronize(device)
-                    reconstruct_end = timer()
+                    psr_end = timer()
 
-                    ray_time = ray_end - ray_start
-                    scan_time = scan_end - ray_end
-                    reconstruct_time = reconstruct_end - scan_end
+                    if j == 0:
+                        R_values[i] = dirs.shape[0] * dirs.shape[2]
 
-                    times[i][0] = times[i][0] + ray_time
-                    times[i][1] = times[i][1] + scan_time
-                    times[i][2] = times[i][2] + reconstruct_time
-                    print(f'N: {N}\t{ray_time:.4f}\t{scan_time:.4f}\t{reconstruct_time:.4f}')
+                    times[0][i] = times[0][i] + (ray_end - ray_start)
+                    times[1][i] = times[1][i] + (query_end - ray_end)
+                    times[2][i] = times[2][i] + (psr_end - query_end)
+                    
+                    if ((j + 1) % 5) == 0:
+                        print(f'{(psr_end - ray_start):.5f}', end='\t')
 
-                    del origins, dirs, intersections, intersection_normals
+                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
+                    gc.collect()
                 
+                print()
                 torch.cuda.empty_cache()
-        
+                gc.collect()
+
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
-        return times / BaselineDevice.time_samples
+        times = times / BaselineDevice.time_samples
+
+        return steps, times, R_values
     
     def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float], list[int]]:
         model, device = utils.init_model(model_name)

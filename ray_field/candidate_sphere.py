@@ -183,65 +183,74 @@ class CandidateSphere(Algorithm):
 
         return times, R_values
 
-    def time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
-        """Measure execution time of the surface reconstruction divided in
-            - Broad scan
-            - Targeted scan
-            - Surface reconstruction
-
-        Args:
-            model_name (CheckpointName): Valid model name
-            N_values (list[int]): N-values to test
-
-        Returns:
-            list[list[float]]: (N, 3) execution times
-        """
+    def time_steps(model_name: CheckpointName, length: int) -> tuple[list[str], list[list[float]], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 1900, length, dtype=int)
+        steps = ['Coarse Scan', 'Ray generation', 'MARF Query', 'PSR']
 
-        times = np.zeros((len(N_values), 3))
+        times = np.zeros((len(steps), len(N_values)))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             for i in range(len(N_values)):
                 N = N_values[i]
+                print(N, end='\t')
 
-                for _ in range(CandidateSphere.time_samples):
-                    torch.cuda.synchronize()
-                    broad_start = timer()
+                for j in range(CandidateSphere.time_samples):
+                    torch.cuda.synchronize(device)
+                    coarse_start = timer()
 
                     origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-                    intersections = CandidateSphere._broad_scan(model, origins, dirs)
+                    all_intersections, all_is_intersecting = CandidateSphere._broad_scan(model, origins, dirs)
 
-                    torch.cuda.synchronize()
-                    broad_end = timer()
+                    torch.cuda.synchronize(device)
+                    coarse_end = timer()
 
-                    radii, centers = CandidateSphere._generate_candidate_spheres(intersections, device)
+                    if j == 0:
+                        R_values[i] = dirs.shape[0] * dirs.shape[2]
+                    
+                    radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
                     origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, CandidateSphere.targeted_m)
+
+                    torch.cuda.synchronize(device)
+                    ray_end = timer()
+
                     intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
 
-                    torch.cuda.synchronize()
+                    torch.cuda.synchronize(device)
                     targeted_end = timer()
 
-                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
 
-                    torch.cuda.synchronize()
-                    reconstruct_end = timer()
+                    torch.cuda.synchronize(device)
+                    psr_end = timer()
 
-                    broad_time = broad_end - broad_start
-                    targeted_time = targeted_end - broad_end
-                    reconstruct_time = reconstruct_end - targeted_end
+                    if j == 0:
+                        R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
 
-                    times[i][0] = times[i][0] + broad_time
-                    times[i][1] = times[i][1] + targeted_time
-                    times[i][2] = times[i][2] + reconstruct_time
-                    print(f'N: {N}\t{broad_time:.4f}\t{targeted_time:.4f}\t{reconstruct_time:.4f}')
+                    times[0][i] = times[0][i] + (coarse_end - coarse_start)
+                    times[1][i] = times[1][i] + (ray_end - coarse_end)
+                    times[2][i] = times[2][i] + (targeted_end - ray_end)
+                    times[3][i] = times[3][i] + (psr_end - targeted_end)
+                    
+                    if ((j + 1) % 5) == 0:
+                        print(f'{(psr_end - coarse_start):.5f}', end='\t')
+
+                    del origins, dirs, all_intersections, all_is_intersecting, radii, centers, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
-            
+                    gc.collect()
+                
+                print()
                 torch.cuda.empty_cache()
-        
+                gc.collect()
+
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
-        return times / CandidateSphere.time_samples
+        times = times / CandidateSphere.time_samples
+
+        return steps, times, R_values
     
     def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float], list[int]]:
         model, device = utils.init_model(model_name)

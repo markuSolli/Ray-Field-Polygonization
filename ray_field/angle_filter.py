@@ -10,7 +10,7 @@ from timeit import default_timer as timer
 from numpy import ndarray
 
 class AngleFilter(Algorithm):
-    cosine_limit: float = 0.4
+    cosine_limit: float = -0.4
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
         model, device = utils.init_model(model_name)
@@ -135,8 +135,69 @@ class AngleFilter(Algorithm):
 
         return times, R_values
 
-    def time_steps(model_name: CheckpointName, N_values: list[int]) -> list[list[float]]:
-        pass
+    def time_steps(model_name: CheckpointName, length: int) -> tuple[list[str], list[list[float]], list[int]]:
+        model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 500, length, dtype=int)
+        steps = ['Ray Generation', 'MARF Query', 'Filter', 'PSR']
+
+        times = np.zeros((len(steps), len(N_values)))
+        R_values = np.zeros(len(N_values), dtype=int)
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+                print(N, end='\t')
+
+                for j in range(AngleFilter.time_samples):
+                    torch.cuda.synchronize(device)
+                    coarse_start = timer()
+
+                    origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+
+                    if j == 0:
+                        R_values[i] = dirs.shape[0] * dirs.shape[2]
+
+                    torch.cuda.synchronize(device)
+                    coarse_end = timer()
+                    
+                    intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
+
+                    torch.cuda.synchronize(device)
+                    ray_end = timer()
+
+                    intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, AngleFilter.cosine_limit)
+
+                    torch.cuda.synchronize(device)
+                    targeted_end = timer()
+
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
+
+                    torch.cuda.synchronize(device)
+                    psr_end = timer()
+
+                    times[0][i] = times[0][i] + (coarse_end - coarse_start)
+                    times[1][i] = times[1][i] + (ray_end - coarse_end)
+                    times[2][i] = times[2][i] + (targeted_end - ray_end)
+                    times[3][i] = times[3][i] + (psr_end - targeted_end)
+                    
+                    if ((j + 1) % 5) == 0:
+                        print(f'{(psr_end - coarse_start):.5f}', end='\t')
+
+                    del origins, dirs, intersections, intersection_normals, is_intersecting, mesh
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                
+                print()
+                torch.cuda.empty_cache()
+                gc.collect()
+
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        times = times / AngleFilter.time_samples
+
+        return steps, times, R_values
     
     def time_chamfer(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[float], list[int]]:
         model, device = utils.init_model(model_name)
