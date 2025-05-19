@@ -79,8 +79,9 @@ class BaselineDevice(Algorithm):
 
         return distances, R_values
     
-    def hausdorff(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+    def hausdorff(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 500, length, dtype=int)
 
         distances = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)

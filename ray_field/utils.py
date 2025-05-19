@@ -347,7 +347,7 @@ def hausdorff_distance_to_stanford(model_name: CheckpointName, mesh: TriangleMes
     stanford_samples = trimesh.sample.sample_surface_even(stanford_mesh, samples)[0]
     generated_samples = np.asarray(mesh.sample_points_uniformly(samples).points)
 
-    return chamfer_distance(stanford_samples, generated_samples)
+    return hausdorff_distance(stanford_samples, generated_samples)
 
 def generate_rays_in_cone(points: torch.Tensor, angles: torch.Tensor, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     N = points.shape[0]

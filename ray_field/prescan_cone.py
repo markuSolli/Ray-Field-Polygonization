@@ -110,8 +110,9 @@ class PrescanCone(Algorithm):
 
         return distances, R_values
     
-    def hausdorff(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+    def hausdorff(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 1900, length, dtype=int)
 
         distances = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)
@@ -136,13 +137,19 @@ class PrescanCone(Algorithm):
                 distance = utils.hausdorff_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
 
                 distances[i] = distance
-                print(f'{distance:.6f}')
+                print(f'{distance:.5f}')
 
                 del origins, dirs, intersections, intersection_normals, mesh
                 torch.cuda.empty_cache()
+                gc.collect()
+            
+            del broad_intersections, broad_normals
+            torch.cuda.empty_cache()
+            gc.collect()
         
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
         return distances, R_values
 

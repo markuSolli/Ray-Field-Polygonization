@@ -110,33 +110,48 @@ class CandidateSphere(Algorithm):
 
         return distances, R_values
 
-    def hausdorff(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    def hausdorff(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 1900, length, dtype=int)
 
-        distances = []
+        distances = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-            broad_intersections = CandidateSphere._broad_scan(model, origins, dirs)
+            all_intersections, all_is_intersecting = CandidateSphere._broad_scan(model, origins, dirs)
+            radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
 
-            for N in N_values:
+            R_values.fill(dirs.shape[0] * dirs.shape[2])
+
+            del origins, dirs, all_intersections, all_is_intersecting
+            torch.cuda.empty_cache()
+            gc.collect()
+
+            for i in range(len(N_values)):
+                N = N_values[i]
                 print(N, end='\t')
 
-                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, device)
                 origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, CandidateSphere.targeted_m)
                 intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+
+                R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
         
                 mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
                 distance = utils.hausdorff_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
 
-                distances.append(distance)
+                distances[i] = distance
                 print(f'{distance:.6f}')
+
+                del origins, dirs, intersections, intersection_normals, mesh
                 torch.cuda.empty_cache()
+                gc.collect()
         
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
-        return distances
+        return distances, R_values
 
     def time(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
