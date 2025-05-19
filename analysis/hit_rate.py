@@ -1,7 +1,6 @@
 import os
 import csv
 import argparse
-import numpy as np
 
 from ray_field import CheckpointName
 from ray_field.baseline_device import BaselineDevice

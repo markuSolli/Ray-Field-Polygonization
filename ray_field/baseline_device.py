@@ -285,8 +285,9 @@ class BaselineDevice(Algorithm):
 
         return times, distances, R_values
     
-    def chamfer_marf(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+    def chamfer_marf(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 500, length, dtype=int)
 
         distances = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)
@@ -310,9 +311,11 @@ class BaselineDevice(Algorithm):
 
                 del origins, dirs, intersections, intersection_normals, mesh
                 torch.cuda.empty_cache()
+                gc.collect()
         
         del model, marf_intersections
         torch.cuda.empty_cache()
+        gc.collect()
 
         return distances, R_values
     
