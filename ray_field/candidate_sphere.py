@@ -26,36 +26,46 @@ class CandidateSphere(Algorithm):
         
         return utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
 
-    def hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    def hit_rate(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 1900, length, dtype=int)
 
-        hit_rates = []
+        hit_rates = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             origins, dirs = utils.generate_sphere_rays_tensor(CandidateSphere.prescan_n, device)
-            broad_intersections = CandidateSphere._broad_scan(model, origins, dirs)
+            all_intersections, all_is_intersecting = CandidateSphere._broad_scan(model, origins, dirs)
+            radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
 
-            init_rays_n = dirs.shape[0] * dirs.shape[2]
+            R_values.fill(dirs.shape[0] * dirs.shape[2])
 
-            for N in N_values:
+            del origins, dirs, all_intersections, all_is_intersecting
+            torch.cuda.empty_cache()
+            gc.collect()
+
+            for i in range(len(N_values)):
+                N = N_values[i]
                 print(N, end='\t')
 
-                radii, centers = CandidateSphere._generate_candidate_spheres(broad_intersections, device)
                 origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, CandidateSphere.targeted_m)
-                intersections, _ = CandidateSphere._targeted_scan(model, origins, dirs)
+                intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
 
-                rays_n = dirs.shape[0] * dirs.shape[2]
+                R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
+                hit_rate = intersections.shape[0] / R_values[i]
 
-                hit_rate = intersections.shape[0] / (rays_n + init_rays_n)
-                hit_rates.append(hit_rate)
-                print(f'{hit_rate:.3f}')
+                hit_rates[i] = hit_rate
+                print(f'{hit_rate:.5f}')
 
+                del origins, dirs, intersections, intersection_normals
                 torch.cuda.empty_cache()
+                gc.collect()
         
         del model
         torch.cuda.empty_cache()
-        
-        return hit_rates
+        gc.collect()
+
+        return hit_rates, R_values
 
     def chamfer(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)

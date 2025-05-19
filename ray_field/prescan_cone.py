@@ -26,37 +26,46 @@ class PrescanCone(Algorithm):
         
         return utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
 
-    def hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[float]:
+    def hit_rate(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 1900, length, dtype=int)
 
-        hit_rates = []
+        hit_rates = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             origins, dirs = utils.generate_sphere_rays_tensor(PrescanCone.prescan_n, device)
-            broad_intersections = PrescanCone._broad_scan(model, origins, dirs)
+            broad_intersections, broad_normals = PrescanCone._broad_scan(model, origins, dirs)
 
-            init_sphere_n = origins.shape[0]
-            init_rays_n = init_sphere_n * (init_sphere_n - 1)
+            R_values.fill(dirs.shape[0] * dirs.shape[2])
 
-            for N in N_values:
+            for i in range(len(N_values)):
+                N = N_values[i]
                 print(N, end='\t')
 
                 origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
-                intersections, _ = PrescanCone._targeted_scan(model, origins, dirs)
+                intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+                intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
 
-                sphere_n = origins.shape[0]
-                rays_n = sphere_n * (sphere_n - 1)
+                R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
+                hit_rate = intersections.shape[0] / R_values[i]
 
-                hit_rate = intersections.shape[0] / (rays_n + init_rays_n)
-                hit_rates.append(hit_rate)
-                print(f'{hit_rate:.3f}')
+                hit_rates[i] = hit_rate
+                print(f'{hit_rate:.5f}')
 
+                del origins, dirs, intersections, intersection_normals
                 torch.cuda.empty_cache()
+                gc.collect()
+            
+            del broad_intersections, broad_normals
+            torch.cuda.empty_cache()
+            gc.collect()
         
         del model
         torch.cuda.empty_cache()
-        
-        return hit_rates
+        gc.collect()
+
+        return hit_rates, R_values
 
     def chamfer(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)

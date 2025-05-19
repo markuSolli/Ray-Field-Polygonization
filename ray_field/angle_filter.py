@@ -22,8 +22,39 @@ class AngleFilter(Algorithm):
 
         return utils.poisson_surface_reconstruction(intersections, intersection_normals, AngleFilter.poisson_depth)
 
-    def hit_rate(model_name: CheckpointName, N_values: list[int]) -> list[float]:
-        pass
+    def hit_rate(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
+        model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 500, length, dtype=int)
+
+        hit_rates = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
+
+        with torch.no_grad():
+            for i in range(len(N_values)):
+                N = N_values[i]
+                print(N, end='\t')
+
+                origins, dirs = utils.generate_sphere_rays_tensor(N, device)
+
+                R_values[i] = dirs.shape[0] * dirs.shape[2]
+
+                intersections, intersection_normals, is_intersecting = AngleFilter._baseline_scan(model, origins, dirs)
+                intersections, intersection_normals = AngleFilter._filter(dirs, intersections, intersection_normals, is_intersecting, AngleFilter.cosine_limit)
+
+                hit_rate = intersections.shape[0] / R_values[i]
+
+                hit_rates[i] = hit_rate
+                print(f'{hit_rate:.5f}')
+
+                del origins, dirs, intersections, intersection_normals, is_intersecting
+                torch.cuda.empty_cache()
+                gc.collect()
+        
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        return hit_rates, R_values
 
     def chamfer(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
