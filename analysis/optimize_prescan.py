@@ -14,10 +14,9 @@ matplotlib.use('Agg')
 DIR_PATH = 'analysis/data/optimize_prescan/'
 
 def compute_values(model_name: CheckpointName, algorithm: type[Algorithm]) -> tuple[list[int], list[list[int]], list[list[float]]]:
-    N_values = list(range(50, 601, 50))
-    M_values = list(range(8, 41, 8))
+    M_values = [8, 16, 32, 64, 128]
     
-    distances, R_values = algorithm.optimize(model_name, N_values, M_values)
+    distances, R_values = algorithm.optimize(model_name, 10, M_values)
 
     return M_values, R_values, distances
 

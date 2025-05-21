@@ -4,7 +4,7 @@ from open3d.geometry import TriangleMesh
 
 class Algorithm(ABC):
     poisson_depth: int = 8
-    time_samples: int = 50
+    time_samples: int = 62
     dist_samples: int = 30000
 
     @staticmethod

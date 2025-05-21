@@ -12,6 +12,7 @@ from numpy import ndarray
 class CandidateSphere(Algorithm):
     prescan_n: int = 64
     targeted_m: str = '8'
+    chamfer_samples: int = 14
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
         model, device = utils.init_model(model_name)
@@ -371,8 +372,8 @@ class CandidateSphere(Algorithm):
         model, device = utils.init_model(model_name)
         N_values = np.linspace(50, 1900, length, dtype=int)
 
-        distances = np.zeros((len(M_values), len(N_values)))
-        R_values = np.zeros((len(M_values), len(N_values)), dtype=int)
+        distances = np.zeros((len(M_values), length))
+        R_values = np.zeros((len(M_values), length), dtype=int)
 
         with torch.no_grad():
             for i in range(len(M_values)):
@@ -380,35 +381,48 @@ class CandidateSphere(Algorithm):
                 origins, dirs = utils.generate_sphere_rays_tensor(M, device)
                 all_intersections, all_is_intersecting = CandidateSphere._broad_scan(model, origins, dirs)
                 radii, centers = CandidateSphere._generate_candidate_spheres(all_intersections, all_is_intersecting)
+                rays_n = dirs.shape[0] * dirs.shape[2]
+                R_values[i].fill(rays_n)
+                N_end = int((250000 - rays_n) / (int(CandidateSphere.targeted_m) * 16))
 
-                R_values[i].fill(dirs.shape[0] * dirs.shape[2])
+                N_values = np.linspace(50, N_end, length, dtype=int)
+
+                del all_intersections, all_is_intersecting
+                torch.cuda.empty_cache()
+                gc.collect()
 
                 for j in range(len(N_values)):
                     N = N_values[j]
-                    print(f'M: {M}\tN: {N}', end='\t')
+                    print(f'M: {M}\tN: {N}')
 
-                    origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, CandidateSphere.targeted_m)
-                    intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
-            
-                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
-                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
+                    for k in range(CandidateSphere.chamfer_samples):
+                        origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, CandidateSphere.targeted_m)
+                        intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+                
+                        mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+                        distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
 
-                    distances[i][j] = distance
-                    R_values[i][j] = R_values[i][j] + dirs.shape[0] * dirs.shape[2]
+                        distances[i][j] = distances[i][j] + distance
+
+                        if k == 0:
+                            R_values[i][j] = R_values[i][j] + dirs.shape[0] * dirs.shape[2]
+
+                        del origins, dirs, intersections, intersection_normals, mesh
+                        torch.cuda.empty_cache()
+                        gc.collect()
                     
-                    print(f'{distance:.6f}')
-
-                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
                     gc.collect()
                 
-                del all_intersections, all_is_intersecting, radii, centers
+                del radii, centers
                 torch.cuda.empty_cache()
                 gc.collect()
         
         del model
         torch.cuda.empty_cache()
         gc.collect()
+
+        distances = distances / CandidateSphere.chamfer_samples
 
         return distances, R_values
     
