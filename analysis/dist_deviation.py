@@ -8,7 +8,7 @@ from ray_field.algorithm import Algorithm
 from analysis import ALGORITHM_LIST, model_checkpoint_dict, class_dict
 
 SAMPLES = 60
-MODEL_NAME = 'buddha'
+MODEL_NAME = 'dragon'
 DIR_PATH = 'analysis/data/dist_deviation/'
 
 def compute_values(algorithm: type[Algorithm]) -> tuple[list[int], list[list[float]]]:
