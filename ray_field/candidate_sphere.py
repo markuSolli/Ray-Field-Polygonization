@@ -10,7 +10,7 @@ from timeit import default_timer as timer
 from numpy import ndarray
 
 class CandidateSphere(Algorithm):
-    prescan_n: int = 32
+    prescan_n: int = 64
     targeted_m: str = '8'
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
@@ -367,8 +367,9 @@ class CandidateSphere(Algorithm):
 
         return times, distances, R_values
     
-    def optimize(model_name: CheckpointName, N_values: list[int], M_values: list[int]) -> tuple[list[list[float]], list[list[int]]]:   
+    def optimize(model_name: CheckpointName, length: int, M_values: list[int]) -> tuple[list[list[float]], list[list[int]]]:   
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 1900, length, dtype=int)
 
         distances = np.zeros((len(M_values), len(N_values)))
         R_values = np.zeros((len(M_values), len(N_values)), dtype=int)
@@ -456,8 +457,9 @@ class CandidateSphere(Algorithm):
         return distances, R_values
     
     @staticmethod
-    def dist_deviation(model_name: CheckpointName, N_values: list[int], samples: int) -> tuple[list[list[float]], list[int]]:
+    def dist_deviation(model_name: CheckpointName, length: int, samples: int) -> tuple[list[list[float]], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 1900, length, dtype=int)
 
         distances = np.zeros((len(N_values), samples))
         R_values = np.zeros(len(N_values), dtype=int)

@@ -5,14 +5,14 @@ import argparse
 import numpy as np
 
 from ray_field.algorithm import Algorithm
-from analysis import ALGORITHM_LIST, N_VALUES, class_dict
+from analysis import ALGORITHM_LIST, model_checkpoint_dict, class_dict
 
 SAMPLES = 60
-MODEL_NAME = 'bunny'
+MODEL_NAME = 'buddha'
 DIR_PATH = 'analysis/data/dist_deviation/'
 
 def compute_values(algorithm: type[Algorithm]) -> tuple[list[int], list[list[float]]]:
-    distances, R_values = algorithm.dist_deviation(MODEL_NAME, N_VALUES, SAMPLES)
+    distances, R_values = algorithm.dist_deviation(model_checkpoint_dict[MODEL_NAME], 10, SAMPLES)
 
     return R_values, distances
 
