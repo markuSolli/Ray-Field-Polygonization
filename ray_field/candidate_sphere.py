@@ -70,8 +70,7 @@ class CandidateSphere(Algorithm):
 
     def chamfer(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
-        N_end = (250000 - (CandidateSphere.prescan_n ** 2)) / (int(CandidateSphere.targeted_m) * 16)
-        N_values = np.linspace(50, N_end, length, dtype=int)
+        N_values = CandidateSphere._get_N_values(length)
 
         distances = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)
@@ -163,7 +162,7 @@ class CandidateSphere(Algorithm):
 
     def time(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
-        N_values = np.linspace(50, 1900, length, dtype=int)
+        N_values = CandidateSphere._get_N_values(length)
 
         times = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)
@@ -197,7 +196,7 @@ class CandidateSphere(Algorithm):
 
                     times[i] = times[i] + time
                     
-                    if ((j + 1) % 6) == 0:
+                    if ((j + 1) % 12) == 0:
                         print(f'{time:.5f}', end='\t')
 
                     del origins, dirs, all_intersections, all_is_intersecting, radii, centers, intersections, intersection_normals, mesh
@@ -541,6 +540,10 @@ class CandidateSphere(Algorithm):
         gc.collect()
 
         return distances, R_values
+    
+    def _get_N_values(length: int):
+        N_end = (250000 - (CandidateSphere.prescan_n ** 2)) / (int(CandidateSphere.targeted_m) * 16)
+        return np.linspace(50, N_end, length, dtype=int)
 
     @staticmethod
     def _broad_scan(model: IntersectionFieldAutoDecoderModel, origins: torch.Tensor, dirs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:           
