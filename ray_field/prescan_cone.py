@@ -11,7 +11,7 @@ from numpy import ndarray
 
 class PrescanCone(Algorithm):
     prescan_n: int = 64
-    targeted_m: str = '128'
+    targeted_m: str = '64'
     chamfer_samples: int = 2
 
     def surface_reconstruction(model_name: CheckpointName, N: int) -> TriangleMesh:
@@ -70,7 +70,8 @@ class PrescanCone(Algorithm):
 
     def chamfer(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
-        N_values = np.linspace(50, 1900, length, dtype=int)
+        N_end = (250000 - (PrescanCone.prescan_n ** 2)) / int(PrescanCone.targeted_m)
+        N_values = np.linspace(50, N_end, length, dtype=int)
 
         distances = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)
@@ -83,21 +84,25 @@ class PrescanCone(Algorithm):
 
             for i in range(len(N_values)):
                 N = N_values[i]
-                print(N, end='\t')
+                print(f'N: {N}')
 
-                origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
-                intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
-                intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
+                for k in range(PrescanCone.chamfer_samples):
+                    origins, dirs = PrescanCone._generate_cone_rays(broad_intersections, N, device, PrescanCone.targeted_m)
+                    intersections, intersection_normals = PrescanCone._targeted_scan(model, origins, dirs)
+                    intersections, intersection_normals = PrescanCone._cat_and_move(intersections, intersection_normals, broad_intersections, broad_normals)
 
-                R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
-        
-                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
-                distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
+                    if (k == 0):
+                        R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
+            
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, PrescanCone.poisson_depth)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, PrescanCone.dist_samples)
 
-                distances[i] = distance
-                print(f'{distance:.5f}')
+                    distances[i] = distances[i] + distance
 
-                del origins, dirs, intersections, intersection_normals, mesh
+                    del origins, dirs, intersections, intersection_normals, mesh
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                
                 torch.cuda.empty_cache()
                 gc.collect()
             
@@ -108,6 +113,8 @@ class PrescanCone(Algorithm):
         del model
         torch.cuda.empty_cache()
         gc.collect()
+
+        distances = distances / PrescanCone.chamfer_samples
 
         return distances, R_values
     

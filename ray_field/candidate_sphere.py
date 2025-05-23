@@ -70,7 +70,8 @@ class CandidateSphere(Algorithm):
 
     def chamfer(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
-        N_values = np.linspace(50, 1900, length, dtype=int)
+        N_end = (250000 - (CandidateSphere.prescan_n ** 2)) / (int(CandidateSphere.targeted_m) * 16)
+        N_values = np.linspace(50, N_end, length, dtype=int)
 
         distances = np.zeros(len(N_values))
         R_values = np.zeros(len(N_values), dtype=int)
@@ -88,26 +89,32 @@ class CandidateSphere(Algorithm):
 
             for i in range(len(N_values)):
                 N = N_values[i]
-                print(N, end='\t')
+                print(f'N: {N}')
 
-                origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, CandidateSphere.targeted_m)
-                intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
+                for k in range(CandidateSphere.chamfer_samples):
+                    origins, dirs = CandidateSphere._generate_candidate_rays(radii, centers, N, device, CandidateSphere.targeted_m)
+                    intersections, intersection_normals = CandidateSphere._targeted_scan(model, origins, dirs)
 
-                R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
-        
-                mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
-                distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
+                    if k == 0:
+                        R_values[i] = R_values[i] + (dirs.shape[0] * dirs.shape[2])
+            
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, CandidateSphere.poisson_depth)
+                    distance = utils.chamfer_distance_to_stanford(model_name, mesh, CandidateSphere.dist_samples)
 
-                distances[i] = distance
-                print(f'{distance:.6f}')
+                    distances[i] = distances[i] + distance
 
-                del origins, dirs, intersections, intersection_normals, mesh
+                    del origins, dirs, intersections, intersection_normals, mesh
+                    torch.cuda.empty_cache()
+                    gc.collect()
+
                 torch.cuda.empty_cache()
                 gc.collect()
         
         del model
         torch.cuda.empty_cache()
         gc.collect()
+
+        distances = distances / CandidateSphere.chamfer_samples
 
         return distances, R_values
 
