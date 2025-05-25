@@ -57,7 +57,7 @@ def plot_results(M_values: list[str], R_values: list[list[int]], distances: list
     
     ax.set_ylabel('CD$\\cdot10^2$')
     #ax.set_xlim([0, 150000])
-    #ax.set_ylim([1.3, 1.6])
+    ax.set_ylim([1.75, 2.1])
     ax.set_xlabel('|R|')
     ax.set_title(f'{model_name_dict[model_name]}')
     ax.legend(loc=(1.04, 0), title='$m$ scheme')
