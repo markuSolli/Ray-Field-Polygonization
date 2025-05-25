@@ -400,8 +400,6 @@ class AngleFilter(Algorithm):
                     M = M_values[j]
                     print(f'N: {N}\tM: {M}')
 
-                    local_times = np.zeros(AngleFilter.time_samples)
-
                     for k in range(AngleFilter.time_samples):
                         torch.cuda.synchronize()
                         start_time = timer()
@@ -419,13 +417,12 @@ class AngleFilter(Algorithm):
                         torch.cuda.synchronize()
                         time = timer() - start_time
 
-                        local_times[k] = time
+                        times[j][i] = times[j][i] + time
 
                         del origins, dirs, intersections, intersection_normals, is_intersecting, mesh
                         torch.cuda.empty_cache()
                         gc.collect()
                     
-                    times[j][i] = np.mean(local_times)
                     torch.cuda.empty_cache()
                     gc.collect()
                 
@@ -435,6 +432,8 @@ class AngleFilter(Algorithm):
         del model
         torch.cuda.empty_cache()
         gc.collect()
+
+        times = times / AngleFilter.time_samples
 
         return times, R_values
 

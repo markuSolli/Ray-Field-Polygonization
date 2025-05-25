@@ -72,8 +72,8 @@ def plot_results(M_values: list[float], times: list[list[float]], distances: lis
         ax.plot(times[i], distances[i], label=f'{M_values[i]:.1f}')
     
     ax.set_ylabel('CD$\\cdot10^2$')
-    ax.set_xlim([0, 3.5])
-    ax.set_ylim([1.5, 3.5])
+    #ax.set_xlim([0, 3.5])
+    ax.set_ylim([1.6, 2.2])
     ax.set_xlabel('Time (s)')
     ax.set_title(f'{model_name_dict[model_name]}')
     ax.legend(loc=(1.04, 0), title='Cosine limit')
