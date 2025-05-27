@@ -169,7 +169,7 @@ def generate_rays_between_points_tensor(origins: torch.Tensor, device: str) -> t
     
     return dirs
 
-def generate_rays_between_sphere_points(N: int) -> tuple[torch.Tensor, torch.Tensor]:
+def generate_rays_between_sphere_points(N: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Args:
     - N (ndarray[n, 3])
@@ -397,6 +397,22 @@ def init_model(model_name: CheckpointName) -> tuple[IntersectionFieldAutoDecoder
     model.eval()
 
     return model, device
+
+def init_model_cpu(model_name: CheckpointName) -> tuple[IntersectionFieldAutoDecoderModel, str]:
+    """Initializes the MARF model, storing it on the CPU turning on eval-mode.
+
+    Args:
+        model_name (CheckpointName): Valid model name
+
+    Returns:
+        IntersectionFieldAutoDecoderModel: The MARF model
+    """    
+    checkpoint = get_checkpoint(model_name)
+
+    model = IntersectionFieldAutoDecoderModel.load_from_checkpoint(checkpoint).to('cpu')
+    model.eval()
+
+    return model
 
 def generate_sphere_rays(N: int, device: str) -> tuple[torch.Tensor, torch.Tensor]:
     """Generates rays between all pairs of sphere points for the given N

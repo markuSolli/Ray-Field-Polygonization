@@ -1,3 +1,4 @@
+import gc
 import torch
 import numpy as np
 
@@ -92,11 +93,12 @@ class Baseline(Algorithm):
 
         return distances
 
-    def time(model_name: CheckpointName, N_values: list[int]) -> tuple[list[float], list[int]]:
+    def time(model_name: CheckpointName, length: int) -> tuple[list[float], list[int]]:
         model, device = utils.init_model(model_name)
+        N_values = np.linspace(50, 500, length, dtype=int)
 
         times = np.zeros(len(N_values))
-        R_values = np.zeros(len(N_values))
+        R_values = np.zeros(len(N_values), dtype=int)
 
         with torch.no_grad():
             for i in range(len(N_values)):
@@ -109,7 +111,7 @@ class Baseline(Algorithm):
 
                     origins, dirs = utils.generate_sphere_rays(N, device)
                     intersections, intersection_normals = Baseline._baseline_scan(model, origins, dirs)
-                    _ = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
+                    mesh = utils.poisson_surface_reconstruction(intersections, intersection_normals, Baseline.poisson_depth)
 
                     torch.cuda.synchronize()
                     time = timer() - start_time
@@ -118,14 +120,21 @@ class Baseline(Algorithm):
                         R_values[i] = dirs.shape[0] * dirs.shape[2]
 
                     times[i] = times[i] + time
-                    print(f'{time:.5f}', end='\t')
+                    
+                    if ((j + 1) % 6) == 0:
+                        print(f'{time:.5f}', end='\t')
+
+                    del origins, dirs, intersections, intersection_normals, mesh
                     torch.cuda.empty_cache()
+                    gc.collect()
                 
                 print()
                 torch.cuda.empty_cache()
-        
+                gc.collect()
+
         del model
         torch.cuda.empty_cache()
+        gc.collect()
 
         times = times / Baseline.time_samples
 
