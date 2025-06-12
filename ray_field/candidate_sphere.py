@@ -218,7 +218,7 @@ class CandidateSphere(Algorithm):
     def time_steps(model_name: CheckpointName, length: int) -> tuple[list[str], list[list[float]], list[int]]:
         model, device = utils.init_model(model_name)
         N_values = CandidateSphere._get_N_values(length)
-        steps = ['Coarse Scan', 'Ray generation', 'MARF Query', 'PSR']
+        steps = ['Coarse Scan', 'Ray Generation', 'MARF Query', 'PSR']
 
         times = np.zeros((len(steps), len(N_values)))
         R_values = np.zeros(len(N_values), dtype=int)
